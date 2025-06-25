@@ -25,8 +25,8 @@ app.secret_key = os.environ.get('SECRET_KEY', 'bipagem_master_hotelaria_2024_oau
 CORS(app)
 
 # Configurações do domínio público
-DOMAIN = "https://www.masterhotelaria.com.br"
-PORT = int(os.environ.get('PORT', 5000))
+DOMAIN = "https://sistema-bipagem-masterhotelaria-production.up.railway.app"
+PORT = int(os.environ.get('PORT', 8080))
 
 # URLs base das APIs
 MERCADO_LIVRE_API = "https://api.mercadolibre.com"
