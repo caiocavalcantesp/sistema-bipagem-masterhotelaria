@@ -1,7 +1,4 @@
 import os
-# Removido os.environ['RESOLVER_OVERRIDE'] pois não será mais necessário com a nova estratégia de DNS
-# e endpoints internacionais.
-
 import json
 import requests
 from flask import Flask, request, redirect, url_for, session, render_template, jsonify
@@ -43,8 +40,7 @@ LOJAINTEGRADA_CLIENT_ID = os.environ.get("LOJAINTEGRADA_CLIENT_ID", "SEU_CLIENT_
 LOJAINTEGRADA_CLIENT_SECRET = os.environ.get("LOJAINTEGRADA_CLIENT_SECRET", "SEU_CLIENT_SECRET_LOJAINTEGRADA")
 LOJAINTEGRADA_REDIRECT_URI = f"{DOMAIN}/oauth/callback/loja-integrada"
 
-# Banco de dados simulado (para produtos e vendas)
-# Este é um exemplo, em um sistema real seria um banco de dados persistente
+# Banco de dados simulado (para produtos e vendas) - Mantido para fallback ou outros usos
 DATABASE = {
     "products": {
         "45061874601": {
@@ -94,6 +90,24 @@ def create_http_session( ):
     session.mount('https://', HTTPAdapter(max_retries=retries ))
     return session
 
+# NOVA FUNÇÃO: Obter detalhes do envio do Mercado Livre
+def get_mercadolivre_shipment_details(shipment_id, access_token):
+    try:
+        http_session = create_http_session( )
+        response = http_session.get(
+            f"{MERCADOLIVRE_API_URL}/shipments/{shipment_id}",
+            headers={
+                **MERCADOLIVRE_HEADERS,
+                'Authorization': f'Bearer {access_token}'
+            },
+            timeout=10
+         )
+        response.raise_for_status() # Levanta exceção para status de erro HTTP (4xx ou 5xx)
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        print(f"Erro ao buscar detalhes do envio {shipment_id}: {e}")
+        return None
+
 @app.route('/')
 def index():
     ml_connected = 'mercadolivre_access_token' in session
@@ -102,27 +116,76 @@ def index():
 
 @app.route('/process_barcode', methods=['POST'])
 def process_barcode():
-    barcode = request.json.get('barcode')
-    if not barcode:
-        return jsonify({"error": "Código de barras não fornecido"}), 400
+    # Agora esperamos um shipment_id (Pack ID)
+    shipment_id = request.json.get('barcode') # Usamos 'barcode' como nome do campo no frontend por conveniência
+    if not shipment_id:
+        return jsonify({"error": "ID do Envio (Pack ID) não fornecido"}), 400
 
-    product_data = DATABASE["products"].get(barcode)
-    if not product_data:
-        product_data = get_simulated_product_data(barcode)
+    product_data = None
+    sale_info = None
+    
+    # Tenta buscar dados do Mercado Livre se conectado
+    if 'mercadolivre_access_token' in session:
+        ml_shipment_data = get_mercadolivre_shipment_details(shipment_id, session['mercadolivre_access_token'])
+        
+        if ml_shipment_data:
+            # Processa os dados do envio do Mercado Livre
+            order_id = ml_shipment_data.get('order_id')
+            status = ml_shipment_data.get('status')
+            receiver_address = ml_shipment_data.get('receiver_address', {})
+            items = ml_shipment_data.get('items', [])
 
-    # Simular uma venda
-    sale_info = {
-        "barcode": barcode,
-        "product_name": product_data["name"],
-        "price": product_data["price"],
-        "timestamp": datetime.now().isoformat(),
-        "buyer": f"Comprador {len(DATABASE['sales']) + 1}", # Nome de comprador simulado
-        "platform": product_data["platform"]
-    }
-    DATABASE["sales"].append(sale_info)
+            # Para simplificar, pegamos o primeiro item do envio
+            if items:
+                first_item = items[0]
+                product_data = {
+                    "name": first_item.get('title'),
+                    "price": first_item.get('unit_price'),
+                    "image": first_item.get('picture_url', 'https://via.placeholder.com/150?text=Sem+Imagem' ),
+                    "description": f"Item do Pedido ML #{order_id}",
+                    "platform": "Mercado Livre"
+                }
+            else:
+                product_data = get_simulated_product_data(shipment_id) # Fallback se não houver itens
+                product_data["description"] = f"Envio ML #{shipment_id} encontrado, mas sem itens detalhados."
+
+            sale_info = {
+                "barcode": shipment_id, # Usamos shipment_id aqui
+                "product_name": product_data["name"],
+                "price": product_data["price"],
+                "timestamp": datetime.now().isoformat(),
+                "buyer": receiver_address.get('receiver_name', 'N/A'),
+                "platform": "Mercado Livre (Real)",
+                "order_id": order_id,
+                "shipment_status": status
+            }
+        else:
+            # Fallback para dados simulados se a API do ML falhar ou não encontrar
+            product_data = get_simulated_product_data(shipment_id)
+            sale_info = {
+                "barcode": shipment_id,
+                "product_name": product_data["name"],
+                "price": product_data["price"],
+                "timestamp": datetime.now().isoformat(),
+                "buyer": "Simulado",
+                "platform": "Simulado"
+            }
+    else:
+        # Se não estiver conectado ao ML, usa dados simulados
+        product_data = get_simulated_product_data(shipment_id)
+        sale_info = {
+            "barcode": shipment_id,
+            "product_name": product_data["name"],
+            "price": product_data["price"],
+            "timestamp": datetime.now().isoformat(),
+            "buyer": "Simulado",
+            "platform": "Simulado (ML Desconectado)"
+        }
+
+    DATABASE["sales"].append(sale_info) # Adiciona ao histórico de vendas simulado
 
     return jsonify({
-        "message": "Código processado com sucesso!",
+        "message": "ID do Envio processado com sucesso!",
         "product": product_data,
         "sale_info": sale_info
     })

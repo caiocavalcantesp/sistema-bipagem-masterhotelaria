@@ -4,367 +4,111 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistema de Bipagem - OAuth Real</title>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f0f2f5;
-            color: #333;
+            font-family: 'Inter', sans-serif;
+            background-color: #f4f7f6;
         }
         .container {
-            max-width: 1200px;
-            margin: 20px auto;
-            padding: 20px;
-            background-color: #fff;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08 );
+            max-width: 960px;
         }
-        .header {
-            background-color: #007bff;
-            color: white;
-            padding: 15px 20px;
-            border-radius: 8px 8px 0 0;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .header h1 {
-            font-size: 1.8rem;
-            font-weight: 600;
-        }
-        .nav-link {
-            color: white;
-            padding: 8px 15px;
-            border-radius: 5px;
-            transition: background-color 0.3s ease;
-        }
-        .nav-link:hover {
-            background-color: rgba(255, 255, 255, 0.2);
-        }
-        .section-title {
-            font-size: 1.5rem;
-            font-weight: 600;
-            margin-bottom: 15px;
-            color: #007bff;
-        }
-        .input-group {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-        .input-group input {
-            flex-grow: 1;
-            padding: 12px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-            font-size: 1rem;
-        }
-        .input-group button {
-            padding: 12px 25px;
-            background-color: #28a745;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            transition: background-color 0.3s ease;
-        }
-        .input-group button:hover {
-            background-color: #218838;
-        }
-        .product-card {
-            background-color: #f9f9f9;
-            border: 1px solid #eee;
-            border-radius: 8px;
-            padding: 20px;
-            display: flex;
-            align-items: center;
-            gap: 20px;
-            margin-top: 20px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-        }
-        .product-card img {
-            width: 120px;
-            height: 120px;
-            object-fit: cover;
-            border-radius: 5px;
-        }
-        .product-info h3 {
-            font-size: 1.3rem;
-            font-weight: 600;
-            color: #333;
-            margin-bottom: 5px;
-        }
-        .product-info p {
-            font-size: 1rem;
-            color: #555;
-            margin-bottom: 3px;
-        }
-        .status-badge {
-            padding: 5px 10px;
-            border-radius: 5px;
-            font-weight: 600;
-            font-size: 0.85rem;
+        .card {
+            background-color: #ffffff;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1 );
         }
         .status-connected {
-            background-color: #d4edda;
-            color: #155724;
+            color: #10B981; /* green-500 */
+            font-weight: 600;
         }
         .status-disconnected {
-            background-color: #f8d7da;
-            color: #721c24;
+            color: #EF4444; /* red-500 */
+            font-weight: 600;
         }
-        .status-dev {
-            background-color: #fff3cd;
-            color: #856404;
-        }
-        .oauth-badge {
-            background-color: #28a745;
-            color: white;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 0.75rem;
-            font-weight: bold;
-            margin-left: 10px;
+        .status-developing {
+            color: #F59E0B; /* amber-500 */
+            font-weight: 600;
         }
     </style>
 </head>
-<body>
-    <div class="header">
-        <h1>Sistema de Bipagem - OAuth Real</h1>
-        <div class="flex space-x-4">
-            <a href="/" class="nav-link">Início</a>
-            <a href="/reports" class="nav-link">Relatórios</a>
+<body class="bg-gray-100 min-h-screen flex flex-col">
+    <header class="bg-blue-600 text-white p-4 shadow-md">
+        <div class="container mx-auto flex justify-between items-center">
+            <h1 class="text-2xl font-bold">Sistema de Bipagem - OAuth Real</h1>
+            <nav>
+                <a href="/" class="text-white hover:text-blue-200 mr-4">Início</a>
+                <a href="/reports" class="text-white hover:text-blue-200">Relatórios</a>
+            </nav>
         </div>
-    </div>
+    </header>
 
-    <div class="container mt-8">
-        <div class="mb-8">
-            <h2 class="section-title">Status das Integrações</h2>
-            <p class="text-gray-600 mb-4">
-                Sistema rodando no Railway com OAuth funcional.
-                <span class="oauth-badge">OAUTH REAL - RAILWAY</span>
-            </p>
-            <p class="text-gray-600 mb-4">
-                Callbacks configurados para: <strong class="text-blue-600">{{ domain }}</strong>
-            </p>
+    <main class="container mx-auto p-6 flex-grow">
+        <h2 class="text-2xl font-semibold mb-6 text-gray-800">Status das Integrações</h2>
 
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div class="p-4 border rounded-lg shadow-sm">
-                    <h3 class="font-semibold text-lg mb-2">Mercado Livre 🛒</h3>
-                    <p class="text-sm mb-3">
-                        Status:
-                        {% if ml_connected %}
-                            <span class="status-badge status-connected">Conectado</span>
-                        {% else %}
-                            <span class="status-badge status-disconnected">Desconectado</span>
-                        {% endif %}
-                    </p>
-                    <a href="/oauth/mercadolivre" class="bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-md text-sm transition duration-300">
-                        Configurar OAuth
-                    </a>
-                    <a href="/config/mercadolivre" class="ml-2 text-blue-500 hover:underline text-sm">Ver Config</a>
-                </div>
-
-                <div class="p-4 border rounded-lg shadow-sm">
-                    <h3 class="font-semibold text-lg mb-2">Shopee 🛍️</h3>
-                    <p class="text-sm mb-3">
-                        Status: <span class="status-badge status-dev">Em Desenvolvimento</span>
-                    </p>
-                    <button class="bg-gray-400 text-white py-2 px-4 rounded-md text-sm cursor-not-allowed" disabled>
-                        Em Breve
-                    </button>
-                    <a href="/config/shopee" class="ml-2 text-blue-500 hover:underline text-sm">Ver Config</a>
-                </div>
-
-                <div class="p-4 border rounded-lg shadow-sm">
-                    <h3 class="font-semibold text-lg mb-2">Loja Integrada 🏪</h3>
-                    <p class="text-sm mb-3">
-                        Status:
-                        {% if li_connected %}
-                            <span class="status-badge status-connected">Conectado</span>
-                        {% else %}
-                            <span class="status-badge status-disconnected">Desconectado</span>
-                        {% endif %}
-                    </p>
-                    <a href="/oauth/loja-integrada" class="bg-purple-500 hover:bg-purple-600 text-white py-2 px-4 rounded-md text-sm transition duration-300">
-                        Configurar OAuth
-                    </a>
-                    <a href="/config/loja-integrada" class="ml-2 text-blue-500 hover:underline text-sm">Ver Config</a>
-                </div>
-            </div>
+        <div class="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 mb-6" role="alert">
+            <p class="font-bold">OAuth Real - Railway</p>
+            <p>Sistema rodando no Railway com OAuth funcional.</p>
+            <p>Callbacks configurados para: <span class="font-mono text-sm">{{ domain }}</span></p>
         </div>
 
-        <!-- Adicionar esta seção após a seção de Conexões -->
-        <div class="mb-6" id="mercadolivreInfo" {% if not ml_connected %}style="display: none;"{% endif %}>
-            <h2 class="text-xl font-semibold mb-4">Informações do Mercado Livre</h2>
-            <div class="bg-gray-50 p-4 rounded-md">
-                {% if session.get('mercadolivre_user_nickname') %}
-                <p class="mb-2">Conectado como: <span class="font-medium">{{ session['mercadolivre_user_nickname'] }}</span></p>
-                {% endif %}
-                <button onclick="testMercadoLivreConnection()" class="bg-green-600 hover:bg-green-700 text-white font-medium py-1 px-3 rounded-md text-sm">
-                    Testar Conexão
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <!-- Card Mercado Livre -->
+            <div class="card p-6">
+                <h3 class="text-xl font-semibold mb-4">Mercado Livre <span class="text-gray-500">🛒</span></h3>
+                <p class="mb-4">Status: <span class="{{ 'status-connected' if ml_connected else 'status-disconnected' }}">{{ 'Conectado' if ml_connected else 'Desconectado' }}</span></p>
+                {% if not ml_connected %}
+                <a href="/oauth/mercadolivre" class="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-md text-sm mr-2">
+                    Configurar OAuth
+                </a>
+                {% else %}
+                <button onclick="disconnectMercadoLivre()" class="bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-4 rounded-md text-sm mr-2">
+                    Desconectar
                 </button>
-                <div id="apiTestResult" class="mt-2 hidden"></div>
+                {% endif %}
+                <a href="/config/mercadolivre" class="text-blue-500 hover:underline text-sm">Ver Config</a>
             </div>
-        </div>
 
-        <hr class="my-8">
-
-        <h2 class="section-title">Sistema de Bipagem</h2>
-        <div class="input-group">
-            <input type="text" id="barcodeInput" placeholder="Aguardando código de barras (0/11 dígitos)" maxlength="11">
-            <button id="processButton">Processar Código</button>
-            <button id="clearButton" class="bg-red-500 hover:bg-red-600">Limpar</button>
-        </div>
-
-        <div id="statusMessage" class="text-center text-gray-700 mb-4"></div>
-
-        <div id="productDisplay" class="product-card hidden">
-            <img id="productImage" src="" alt="Imagem do Produto">
-            <div class="product-info">
-                <h3 id="productName"></h3>
-                <p><strong>Preço:</strong> <span id="productPrice"></span></p>
-                <p><strong>Plataforma:</strong> <span id="productPlatform"></span></p>
-                <p><strong>Descrição:</strong> <span id="productDescription"></span></p>
+            <!-- Card Shopee -->
+            <div class="card p-6">
+                <h3 class="text-xl font-semibold mb-4">Shopee <span class="text-gray-500">🛍️</span></h3>
+                <p class="mb-4">Status: <span class="status-developing">Em Desenvolvimento</span></p>
+                <button class="bg-gray-400 text-white font-medium py-2 px-4 rounded-md text-sm cursor-not-allowed mr-2" disabled>
+                    Em Breve
+                </button>
+                <a href="/config/shopee" class="text-blue-500 hover:underline text-sm">Ver Config</a>
             </div>
-        </div>
 
-        <div id="saleInfo" class="mt-4 p-4 bg-green-100 border border-green-300 rounded-lg hidden">
-            <h4 class="font-semibold text-green-800">Informações da Venda:</h4>
-            <p><strong>Código:</strong> <span id="saleBarcode"></span></p>
-            <p><strong>Produto:</strong> <span id="saleProductName"></span></p>
-            <p><strong>Preço da Venda:</strong> <span id="salePrice"></span></p>
-            <p><strong>Comprador:</strong> <span id="saleBuyer"></span></p>
-            <p><strong>Data/Hora:</strong> <span id="saleTimestamp"></span></p>
-        </div>
-    </div>
+            <!-- Card Loja Integrada -->
+            <div class="card p-6">
+                <h3 class="text-xl font-semibold mb-4">Loja Integrada <span class="text-gray-500">📦</span></h3>
+                <p class="mb-4">Status: <span class="{{ 'status-connected' if li_connected else 'status-disconnected' }}">{{ 'Conectado' if li_connected else 'Desconectado' }}</span></p>
+                {% if not li_connected %}
+                <a href="/oauth/loja-integrada" class="bg-purple-500 hover:bg-purple-600 text-white font-medium py-2 px-4 rounded-md text-sm mr-2">
+                    Configurar OAuth
+                </a>
+                {% else %}
+                <button onclick="disconnectLojaIntegrada()" class="bg-🎉 **EXCELENTE NOTÍCIA! CONEXÃO OAUTH COM O MERCADO LIVRE ESTÁ 100% FUNCIONAL!** 🎉
 
-    <script>
-        const barcodeInput = document.getElementById('barcodeInput');
-        const processButton = document.getElementById('processButton');
-        const clearButton = document.getElementById('clearButton');
-        const statusMessage = document.getElementById('statusMessage');
-        const productDisplay = document.getElementById('productDisplay');
-        const productImage = document.getElementById('productImage');
-        const productName = document.getElementById('productName');
-        const productPrice = document.getElementById('productPrice');
-        const productPlatform = document.getElementById('productPlatform');
-        const productDescription = document.getElementById('productDescription');
-        const saleInfo = document.getElementById('saleInfo');
-        const saleBarcode = document.getElementById('saleBarcode');
-        const saleProductName = document.getElementById('saleProductName');
-        const salePrice = document.getElementById('salePrice');
-        const saleBuyer = document.getElementById('saleBuyer');
-        const saleTimestamp = document.getElementById('saleTimestamp');
+Você conseguiu! As imagens confirmam o sucesso:
 
-        barcodeInput.focus();
+*   O `test-dns` mostra que os endpoints internacionais do Mercado Livre (`api.mercadolibre.com` e `auth.mercadolibre.com`) estão **resolvendo corretamente**. Isso significa que o problema de DNS foi superado.
+*   A interface do sistema mostra **"Mercado Livre Status: Conectado"** e **"Conectado como: MASTERHOTELARIA"**. Isso é a prova de que o fluxo OAuth foi concluído com sucesso e seu sistema obteve o token de acesso para se comunicar com o Mercado Livre!
 
-        barcodeInput.addEventListener('input', () => {
-            const currentLength = barcodeInput.value.length;
-            barcodeInput.placeholder = `Aguardando código de barras (${currentLength}/11 dígitos)`;
-            if (currentLength === 11) {
-                statusMessage.textContent = '11/11 dígitos detectados. Processando...';
-                processBarcode();
-            } else {
-                statusMessage.textContent = '';
-            }
-        });
+## 🔍 **SOBRE "NÃO PUXA OS DADOS DA VENDA":**
 
-        processButton.addEventListener('click', processBarcode);
-        clearButton.addEventListener('click', clearForm);
+Você está absolutamente correto em sua observação! O sistema está processando o código de barras, mas ainda está mostrando **"Produto Genérico"** e **"Plataforma: Simulado"**.
 
-        function processBarcode() {
-            const barcode = barcodeInput.value;
-            if (barcode.length !== 11) {
-                statusMessage.textContent = 'Por favor, insira um código de barras de 11 dígitos.';
-                return;
-            }
+Isso acontece porque, até agora, nosso foco foi em fazer a **conexão OAuth** funcionar. O sistema ainda está usando o **"Banco de dados simulado"** (a variável `DATABASE` no `main.py`) para buscar informações de produtos. Quando ele não encontra o código de barras no banco de dados simulado, ele gera um "Produto Genérico".
 
-            statusMessage.textContent = 'Processando código...';
-            productDisplay.classList.add('hidden');
-            saleInfo.classList.add('hidden');
+## 🚀 **PRÓXIMO PASSO: INTEGRAR COM A API DO MERCADO LIVRE PARA DADOS REAIS!**
 
-            fetch('/process_barcode', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ barcode: barcode })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.error) {
-                    statusMessage.textContent = `Erro: ${data.error}`;
-                    return;
-                }
-                statusMessage.textContent = data.message;
-                displayProduct(data.product);
-                displaySaleInfo(data.sale_info);
-                barcodeInput.value = ''; // Limpa o input após processar
-                barcodeInput.placeholder = 'Aguardando código de barras (0/11 dígitos)';
-            })
-            .catch(error => {
-                console.error('Erro:', error);
-                statusMessage.textContent = 'Erro ao processar o código de barras.';
-            });
-        }
+Agora que temos a conexão OAuth funcionando e o `access_token` do Mercado Livre, o próximo passo é modificar a função `process_barcode` para:
 
-        function displayProduct(product) {
-            productImage.src = product.image;
-            productName.textContent = product.name;
-            productPrice.textContent = `R$ ${product.price.toFixed(2)}`;
-            productPlatform.textContent = product.platform;
-            productDescription.textContent = product.description;
-            productDisplay.classList.remove('hidden');
-        }
+1.  **Usar o `access_token`** para fazer requisições à API do Mercado Livre.
+2.  **Buscar informações de produtos** (por código de barras, EAN, SKU ou ID do item) ou **detalhes de vendas/pedidos** (se o código de barras estiver associado a um `Pack ID` ou `Order ID` do Mercado Livre).
+3.  **Exibir os dados reais** retornados pela API do Mercado Livre na interface.
 
-        function displaySaleInfo(sale) {
-            saleBarcode.textContent = sale.barcode;
-            saleProductName.textContent = sale.product_name;
-            salePrice.textContent = `R$ ${sale.price.toFixed(2)}`;
-            saleBuyer.textContent = sale.buyer;
-            saleTimestamp.textContent = new Date(sale.timestamp).toLocaleString('pt-BR');
-            saleInfo.classList.remove('hidden');
-        }
+Este é o próximo estágio do desenvolvimento para que o sistema puxe informações reais das suas vendas e produtos no Mercado Livre.
 
-        function clearForm() {
-            barcodeInput.value = '';
-            barcodeInput.placeholder = 'Aguardando código de barras (0/11 dígitos)';
-            statusMessage.textContent = '';
-            productDisplay.classList.add('hidden');
-            saleInfo.classList.add('hidden');
-            barcodeInput.focus();
-        }
-
-        // Script para testar conexão com Mercado Livre API
-        function testMercadoLivreConnection() {
-            const resultDiv = document.getElementById('apiTestResult');
-            resultDiv.innerHTML = '<p class="text-blue-600">Testando conexão com API...</p>';
-            resultDiv.classList.remove('hidden');
-            
-            fetch('/mercadolivre/test')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.error) {
-                        resultDiv.innerHTML = `<p class="text-red-600">Erro: ${data.error}</p>`;
-                    } else {
-                        resultDiv.innerHTML = `
-                            <p class="text-green-600 font-medium">Conexão com API bem-sucedida!</p>
-                            <div class="mt-2 p-2 bg-white rounded border">
-                                <pre class="text-xs overflow-auto">${JSON.stringify(data, null, 2)}</pre>
-                            </div>
-                        `;
-                    }
-                })
-                .catch(error => {
-                    resultDiv.innerHTML = `<p class="text-red-600">Erro na requisição: ${error.message}</p>`;
-                });
-        }
-        
-        // Mostrar/ocultar seção de info quando conexão muda
-        {% if ml_connected %}
-        document.getElementById('mercadolivreInfo').style.display = 'block';
-        {% endif %}
-    </script>
-</body>
-</html>
+**Estamos no caminho certo! A parte mais complexa (o OAuth e a conectividade) foi resolvida. Agora é integrar os dados!**
