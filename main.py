@@ -3,21 +3,26 @@ import json
 import requests
 from flask import Flask, request, redirect, url_for, session, render_template, jsonify
 from datetime import datetime
+from urllib.parse import urlencode # Importação adicionada
 
 app = Flask(__name__)
-app.secret_key = os.urandom(24)
+app.secret_key = os.urandom(24) # Mantenha esta linha para segurança da sessão
 
 # Configurações do OAuth para Mercado Livre e Loja Integrada
 # ATENÇÃO: O DOMAIN agora aponta para o Railway para o callback funcionar
 DOMAIN = "https://sistema-bipagem-masterhotelaria-production.up.railway.app"
 
 # Credenciais do Mercado Livre (substitua pelas suas )
-# CLIENT ID CORRIGIDO AQUI!
+# CLIENT ID CORRIGIDO E SECRET AGORA LÊ DE VARIAVEL DE AMBIENTE OU USA DEFAULT
 MERCADOLIVRE_CLIENT_ID = os.environ.get("MERCADOLIVRE_CLIENT_ID", "427016700814141")
-MERCADOLIVRE_CLIENT_SECRET = os.environ.get("MERCADOLIVRE_CLIENT_SECRET", "CYR6NVWYsN5zf1JhdMUD4EA2WXDPyRry")
+MERCADOLIVRE_CLIENT_SECRET = os.environ.get("MERCADOLIVRE_CLIENT_SECRET", "CYR6NVWYsN5zf1JhdMUD4EA2WXDPyRry") # Use seu Client Secret aqui como default
 MERCADOLIVRE_REDIRECT_URI = f"{DOMAIN}/oauth/callback/mercadolivre"
+MERCADOLIVRE_AUTH_URL = 'https://auth.mercadolivre.com.br/authorization'
+MERCADOLIVRE_TOKEN_URL = 'https://api.mercadolivre.com/oauth/token'
+MERCADOLIVRE_API_URL = 'https://api.mercadolivre.com'
 
-# Credenciais da Loja Integrada (substitua pelas suas)
+
+# Credenciais da Loja Integrada (substitua pelas suas )
 LOJAINTEGRADA_CLIENT_ID = os.environ.get("LOJAINTEGRADA_CLIENT_ID", "SEU_CLIENT_ID_LOJAINTEGRADA")
 LOJAINTEGRADA_CLIENT_SECRET = os.environ.get("LOJAINTEGRADA_CLIENT_SECRET", "SEU_CLIENT_SECRET_LOJAINTEGRADA")
 LOJAINTEGRADA_REDIRECT_URI = f"{DOMAIN}/oauth/callback/loja-integrada"
@@ -98,27 +103,39 @@ def process_barcode():
 def reports():
     return render_template('reports.html', sales=DATABASE["sales"])
 
-# Rotas de OAuth
+# Rotas de OAuth - Mercado Livre (ATUALIZADAS)
 @app.route('/oauth/mercadolivre')
 def oauth_mercadolivre():
-    auth_url = (
-        f"https://auth.mercadolivre.com.br/authorization?"
-        f"response_type=code&client_id={MERCADOLIVRE_CLIENT_ID}&"
-        f"redirect_uri={MERCADOLIVRE_REDIRECT_URI}"
-     )
+    # Parâmetros obrigatórios conforme documentação
+    params = {
+        'response_type': 'code',
+        'client_id': MERCADOLIVRE_CLIENT_ID,
+        'redirect_uri': MERCADOLIVRE_REDIRECT_URI,
+        # Adicionando state para proteção CSRF conforme boas práticas
+        'state': os.urandom(16).hex()
+    }
+    session['oauth_state'] = params['state'] # Armazena o state na sessão
+    
+    # Construindo URL conforme documentação oficial
+    auth_url = f"{MERCADOLIVRE_AUTH_URL}?{urlencode(params)}"
     return redirect(auth_url)
 
 @app.route('/oauth/callback/mercadolivre')
 def oauth_callback_mercadolivre():
+    # Verificação do state para proteção CSRF
+    if request.args.get('state') != session.pop('oauth_state', None): # Usa pop para remover da sessão após uso
+        return "Erro de segurança: state inválido ou ausente", 403
+    
+    error = request.args.get('error')
+    if error:
+        error_description = request.args.get('error_description', '')
+        return f"Erro na autenticação: {error} - {error_description}", 400
+    
     code = request.args.get('code')
     if not code:
-        return "Erro: Código de autorização não recebido do Mercado Livre.", 400
-
-    token_url = "https://api.mercadolivre.com/oauth/token"
-    headers = {
-        'Accept': 'application/json',
-        'Content-Type': 'application/x-www-form-urlencoded'
-    }
+        return "Código de autorização não recebido", 400
+    
+    # Preparando dados para troca do code por token
     data = {
         'grant_type': 'authorization_code',
         'client_id': MERCADOLIVRE_CLIENT_ID,
@@ -126,28 +143,116 @@ def oauth_callback_mercadolivre():
         'code': code,
         'redirect_uri': MERCADOLIVRE_REDIRECT_URI
     }
-
+    
     try:
-        response = requests.post(token_url, headers=headers, data=data )
-        response.raise_for_status() # Levanta um erro para status HTTP ruins
-        token_info = response.json()
-
-        session['mercadolivre_access_token'] = token_info['access_token']
-        session['mercadolivre_refresh_token'] = token_info['refresh_token']
-        session['mercadolivre_user_id'] = token_info['user_id']
-
-        # Exemplo: buscar informações do usuário
-        user_info_url = f"https://api.mercadolibre.com/users/{token_info['user_id']}"
-        user_headers = {'Authorization': f"Bearer {token_info['access_token']}"}
-        user_response = requests.get(user_info_url, headers=user_headers )
-        user_response.raise_for_status()
-        user_data = user_response.json()
-        session['mercadolivre_nickname'] = user_data.get('nickname', 'Usuário ML')
-
+        # Fazendo a requisição conforme documentação
+        response = requests.post(
+            MERCADOLIVRE_TOKEN_URL,
+            data=data,
+            headers={'Accept': 'application/json',
+                   'Content-Type': 'application/x-www-form-urlencoded'}
+        )
+        
+        # Tratamento de erros conforme documentação
+        if response.status_code != 200:
+            error_data = response.json()
+            return f"Erro {error_data.get('error')}: {error_data.get('message')}", 400
+        
+        token_data = response.json()
+        
+        # Armazenando tokens conforme resposta esperada
+        session['mercadolivre_access_token'] = token_data['access_token']
+        session['mercadolivre_refresh_token'] = token_data.get('refresh_token')
+        session['mercadolivre_expires_in'] = token_data.get('expires_in')
+        session['mercadolivre_user_id'] = token_data.get('user_id')
+        
+        # Obter informações do usuário para demonstrar integração
+        user_info = get_mercadolivre_user_info(token_data['access_token'])
+        if user_info:
+            session['mercadolivre_user_nickname'] = user_info.get('nickname')
+        
         return redirect(url_for('index'))
     except requests.exceptions.RequestException as e:
-        app.logger.error(f"Erro ao obter token do Mercado Livre: {e}")
-        return f"Erro ao conectar com Mercado Livre: {e}", 500
+        return f"Erro na comunicação com o Mercado Livre: {str(e)}", 500
+
+def get_mercadolivre_user_info(access_token):
+    """Obtém informações do usuário autenticado conforme API"""
+    try:
+        response = requests.get(
+            f"{MERCADOLIVRE_API_URL}/users/me",
+            headers={
+                'Authorization': f'Bearer {access_token}'
+            }
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException:
+        return None
+
+@app.route('/mercadolivre/test')
+def test_mercadolivre_connection():
+    """Rota de teste para verificar conexão com API"""
+    if 'mercadolivre_access_token' not in session:
+        return jsonify({'error': 'Não autenticado'}), 401
+    
+    try:
+        # Exemplo de chamada à API - obtendo informações do usuário
+        response = requests.get(
+            f"{MERCADOLIVRE_API_URL}/users/me",
+            headers={
+                'Authorization': f'Bearer {session['mercadolivre_access_token']}'
+            }
+        )
+        
+        if response.status_code == 401:
+            # Token pode ter expirado - tentar renovar com refresh_token
+            if 'mercadolivre_refresh_token' in session:
+                refresh_response = refresh_mercadolivre_token()
+                if refresh_response[1] == 200: # Verifica o status code da tupla retornada
+                    # Tentar novamente a chamada após o refresh
+                    response = requests.get(
+                        f"{MERCADOLIVRE_API_URL}/users/me",
+                        headers={
+                            'Authorization': f'Bearer {session['mercadolivre_access_token']}'
+                        }
+                    )
+                    response.raise_for_status()
+                    return jsonify(response.json())
+                else:
+                    return refresh_response # Retorna o erro do refresh
+            return jsonify({'error': 'Token expirado e sem refresh token ou falha no refresh'}), 401
+        
+        response.raise_for_status()
+        return jsonify(response.json())
+    except requests.exceptions.RequestException as e:
+        return jsonify({'error': str(e)}), 500
+
+def refresh_mercadolivre_token():
+    """Atualiza o token de acesso usando refresh token conforme documentação"""
+    if 'mercadolivre_refresh_token' not in session:
+        return jsonify({'error': 'Refresh token não disponível'}), 400
+    
+    data = {
+        'grant_type': 'refresh_token',
+        'client_id': MERCADOLIVRE_CLIENT_ID,
+        'client_secret': MERCADOLIVRE_CLIENT_SECRET,
+        'refresh_token': session['mercadolivre_refresh_token']
+    }
+    
+    try:
+        response = requests.post(MERCADOLIVRE_TOKEN_URL, data=data)
+        response.raise_for_status()
+        token_data = response.json()
+        
+        # Atualiza os tokens na sessão
+        session['mercadolivre_access_token'] = token_data['access_token']
+        session['mercadolivre_refresh_token'] = token_data.get('refresh_token', session['mercadolivre_refresh_token']) # Refresh token pode não vir em todas as respostas
+        session['mercadolivre_expires_in'] = token_data.get('expires_in')
+        
+        return jsonify({'success': True, 'message': 'Token atualizado'}), 200
+    except requests.exceptions.RequestException as e:
+        return jsonify({'error': str(e)}), 500
+
 
 @app.route('/oauth/loja-integrada')
 def oauth_loja_integrada():

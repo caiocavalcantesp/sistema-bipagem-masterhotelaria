@@ -194,6 +194,20 @@
             </div>
         </div>
 
+        <!-- Adicionar esta seção após a seção de Conexões -->
+        <div class="mb-6" id="mercadolivreInfo" {% if not ml_connected %}style="display: none;"{% endif %}>
+            <h2 class="text-xl font-semibold mb-4">Informações do Mercado Livre</h2>
+            <div class="bg-gray-50 p-4 rounded-md">
+                {% if session.get('mercadolivre_user_nickname') %}
+                <p class="mb-2">Conectado como: <span class="font-medium">{{ session['mercadolivre_user_nickname'] }}</span></p>
+                {% endif %}
+                <button onclick="testMercadoLivreConnection()" class="bg-green-600 hover:bg-green-700 text-white font-medium py-1 px-3 rounded-md text-sm">
+                    Testar Conexão
+                </button>
+                <div id="apiTestResult" class="mt-2 hidden"></div>
+            </div>
+        </div>
+
         <hr class="my-8">
 
         <h2 class="section-title">Sistema de Bipagem</h2>
@@ -321,6 +335,36 @@
             saleInfo.classList.add('hidden');
             barcodeInput.focus();
         }
+
+        // Script para testar conexão com Mercado Livre API
+        function testMercadoLivreConnection() {
+            const resultDiv = document.getElementById('apiTestResult');
+            resultDiv.innerHTML = '<p class="text-blue-600">Testando conexão com API...</p>';
+            resultDiv.classList.remove('hidden');
+            
+            fetch('/mercadolivre/test')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        resultDiv.innerHTML = `<p class="text-red-600">Erro: ${data.error}</p>`;
+                    } else {
+                        resultDiv.innerHTML = `
+                            <p class="text-green-600 font-medium">Conexão com API bem-sucedida!</p>
+                            <div class="mt-2 p-2 bg-white rounded border">
+                                <pre class="text-xs overflow-auto">${JSON.stringify(data, null, 2)}</pre>
+                            </div>
+                        `;
+                    }
+                })
+                .catch(error => {
+                    resultDiv.innerHTML = `<p class="text-red-600">Erro na requisição: ${error.message}</p>`;
+                });
+        }
+        
+        // Mostrar/ocultar seção de info quando conexão muda
+        {% if ml_connected %}
+        document.getElementById('mercadolivreInfo').style.display = 'block';
+        {% endif %}
     </script>
 </body>
 </html>
