@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Bipagem</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-3xl font-bold text-center mb-8">Sistema de Bipagem</h1>
+        
+        <div class="max-w-2xl mx-auto bg-white rounded-lg shadow-md p-6">
+            <!-- Conexão Mercado Livre -->
+            <div class="mb-6 p-4 border rounded">
+                <h2 class="text-xl font-semibold mb-2">Mercado Livre</h2>
+                {% if ml_connected %}
+                    <p class="text-green-600">Conectado</p>
+                    <button onclick="testConnection()" class="mt-2 bg-blue-500 text-white px-4 py-2 rounded">
+                        Testar Conexão
+                    </button>
+                {% else %}
+                    <p class="text-red-600">Desconectado</p>
+                    <a href="/oauth/mercadolivre" class="mt-2 inline-block bg-green-500 text-white px-4 py-2 rounded">
+                        Conectar
+                    </a>
+                {% endif %}
+            </div>
+
+            <!-- Área de Bipagem -->
+            <div class="mb-6">
+                <h2 class="text-xl font-semibold mb-4">Bipagem de Envios</h2>
+                <div class="flex space-x-4">
+                    <input type="text" id="barcodeInput" placeholder="Código de envio" 
+                           class="flex-1 px-3 py-2 border rounded">
+                    <button onclick="processShipment()" class="bg-blue-500 text-white px-4 py-2 rounded">
+                        Processar
+                    </button>
+                </div>
+            </div>
+
+            <!-- Resultados -->
+            <div id="results" class="hidden p-4 bg-gray-50 rounded">
+                <h3 class="font-bold mb-2">Informações do Envio</h3>
+                <div id="resultContent"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function processShipment() {
+            const barcode = document.getElementById('barcodeInput').value;
+            const resultsDiv = document.getElementById('results');
+            const contentDiv = document.getElementById('resultContent');
+
+            resultsDiv.classList.add('hidden');
+            contentDiv.innerHTML = '<p>Processando...</p>';
+
+            try {
+                const response = await fetch('/process_shipment', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ barcode })
+                });
+
+                const data = await response.json();
+
+                if (data.error) {
+                    contentDiv.innerHTML = `<p class="text-red-500">${data.error}</p>`;
+                } else {
+                    contentDiv.innerHTML = `
+                        <p><strong>ID do Pedido:</strong> ${data.data.id}</p>
+                        <p><strong>Status:</strong> ${data.data.status}</p>
+                        <pre class="text-xs mt-2">${JSON.stringify(data.data, null, 2)}</pre>
+                    `;
+                }
+                resultsDiv.classList.remove('hidden');
+            } catch (error) {
+                contentDiv.innerHTML = `<p class="text-red-500">Erro: ${error.message}</p>`;
+                resultsDiv.classList.remove('hidden');
+            }
+        }
+
+        async function testConnection() {
+            const response = await fetch('/mercadolivre/test');
+            const data = await response.json();
+            alert(data.error || "Conexão OK!");
+        }
+    </script>
+</body>
+</html>
