@@ -1,10 +1,12 @@
 {
   "build": {
-    "builder": "NIXPACKS"
-  },
-  "deploy": {
-    "startCommand": "gunicorn main:app --bind 0.0.0.0:$PORT",
-    "healthcheckPath": "/",
-    "healthcheckTimeout": 300
+    "builder": "nixpacks",
+    "config": {
+      "nixpacks": {
+        "dns": {
+          "nameservers": ["1.1.1.1", "8.8.8.8"]
+        }
+      }
+    }
   }
 }

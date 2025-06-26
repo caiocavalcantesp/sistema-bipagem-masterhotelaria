@@ -3,7 +3,9 @@ import json
 import requests
 from flask import Flask, request, redirect, url_for, session, render_template, jsonify
 from datetime import datetime
-from urllib.parse import urlencode # Importação adicionada
+from urllib.parse import urlencode
+from requests.adapters import HTTPAdapter # Nova importação
+from urllib3.util.retry import Retry # Nova importação
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24) # Mantenha esta linha para segurança da sessão
@@ -66,7 +68,19 @@ def get_simulated_product_data(barcode ):
         "platform": "Simulado"
     }
 
-@app.route('/' )
+# Função para criar uma sessão requests com retries
+def create_http_session( ):
+    session = requests.Session()
+    retries = Retry(
+        total=3, # Tenta 3 vezes
+        backoff_factor=1, # Espera 1, 2, 4 segundos entre as tentativas
+        status_forcelist=[500, 502, 503, 504], # Retenta em erros de servidor
+        allowed_methods=frozenset(['GET', 'POST']) # Permite retentar GET e POST
+    )
+    session.mount('https://', HTTPAdapter(max_retries=retries ))
+    return session
+
+@app.route('/')
 def index():
     ml_connected = 'mercadolivre_access_token' in session
     li_connected = 'lojaintegrada_access_token' in session
@@ -145,12 +159,17 @@ def oauth_callback_mercadolivre():
     }
     
     try:
+        http_session = create_http_session( ) # Usa a sessão com retries
         # Fazendo a requisição conforme documentação
-        response = requests.post(
+        response = http_session.post( # Usa http_session
             MERCADOLIVRE_TOKEN_URL,
             data=data,
-            headers={'Accept': 'application/json',
-                   'Content-Type': 'application/x-www-form-urlencoded'}
+            headers={
+                'Accept': 'application/json',
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'User-Agent': 'SistemaBipagem/1.0 (contact@masterhotelaria.com.br )' # Adicionado User-Agent
+            },
+            timeout=10 # Adicionado timeout de 10 segundos
         )
         
         # Tratamento de erros conforme documentação
@@ -178,11 +197,14 @@ def oauth_callback_mercadolivre():
 def get_mercadolivre_user_info(access_token):
     """Obtém informações do usuário autenticado conforme API"""
     try:
-        response = requests.get(
+        http_session = create_http_session( ) # Usa a sessão com retries
+        response = http_session.get( # Usa http_session
             f"{MERCADOLIVRE_API_URL}/users/me",
             headers={
-                'Authorization': f'Bearer {access_token}'
-            }
+                'Authorization': f'Bearer {access_token}',
+                'User-Agent': 'SistemaBipagem/1.0 (contact@masterhotelaria.com.br )' # Adicionado User-Agent
+            },
+            timeout=10 # Adicionado timeout
         )
         response.raise_for_status()
         return response.json()
@@ -196,12 +218,15 @@ def test_mercadolivre_connection():
         return jsonify({'error': 'Não autenticado'}), 401
     
     try:
+        http_session = create_http_session( ) # Usa a sessão com retries
         # Exemplo de chamada à API - obtendo informações do usuário
-        response = requests.get(
+        response = http_session.get( # Usa http_session
             f"{MERCADOLIVRE_API_URL}/users/me",
             headers={
-                'Authorization': f'Bearer {session['mercadolivre_access_token']}'
-            }
+                'Authorization': f'Bearer {session['mercadolivre_access_token']}',
+                'User-Agent': 'SistemaBipagem/1.0 (contact@masterhotelaria.com.br )' # Adicionado User-Agent
+            },
+            timeout=10 # Adicionado timeout
         )
         
         if response.status_code == 401:
@@ -210,11 +235,13 @@ def test_mercadolivre_connection():
                 refresh_response = refresh_mercadolivre_token()
                 if refresh_response[1] == 200: # Verifica o status code da tupla retornada
                     # Tentar novamente a chamada após o refresh
-                    response = requests.get(
+                    response = http_session.get( # Usa http_session
                         f"{MERCADOLIVRE_API_URL}/users/me",
                         headers={
-                            'Authorization': f'Bearer {session['mercadolivre_access_token']}'
-                        }
+                            'Authorization': f'Bearer {session['mercadolivre_access_token']}',
+                            'User-Agent': 'SistemaBipagem/1.0 (contact@masterhotelaria.com.br )' # Adicionado User-Agent
+                        },
+                        timeout=10 # Adicionado timeout
                     )
                     response.raise_for_status()
                     return jsonify(response.json())
@@ -240,7 +267,10 @@ def refresh_mercadolivre_token():
     }
     
     try:
-        response = requests.post(MERCADOLIVRE_TOKEN_URL, data=data)
+        http_session = create_http_session( ) # Usa a sessão com retries
+        response = http_session.post(MERCADOLIVRE_TOKEN_URL, data=data, headers={
+            'User-Agent': 'SistemaBipagem/1.0 (contact@masterhotelaria.com.br )' # Adicionado User-Agent
+        }, timeout=10) # Adicionado timeout
         response.raise_for_status()
         token_data = response.json()
         
