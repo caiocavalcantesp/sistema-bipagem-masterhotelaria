@@ -1,6 +1,6 @@
 import os
 # Adicionado para forçar uso de DNS públicos como solução alternativa
-os.environ['RESOLVER_OVERRIDE'] = '1.1.1.1,8.8.8.8'
+os.environ['RESOLVER_OVERRIDE'] = '1.1.1.1,8.8.8.8,208.67.222.222'
 
 import json
 import requests
@@ -23,7 +23,8 @@ DOMAIN = "https://sistema-bipagem-masterhotelaria-production.up.railway.app"
 MERCADOLIVRE_CLIENT_ID = os.environ.get("MERCADOLIVRE_CLIENT_ID", "427016700814141")
 MERCADOLIVRE_CLIENT_SECRET = os.environ.get("MERCADOLIVRE_CLIENT_SECRET", "CYR6NVWYsN5zf1JhdMUD4EA2WXDPyRry") # Use seu Client Secret aqui como default
 MERCADOLIVRE_REDIRECT_URI = f"{DOMAIN}/oauth/callback/mercadolivre"
-MERCADOLIVRE_AUTH_URL = 'https://auth.mercadolivre.com.br/authorization'
+# MERCADOLIVRE_AUTH_URL = 'https://auth.mercadolivre.com.br/authorization' # Linha original
+MERCADOLIVRE_AUTH_URL = 'https://auth.mercadolibre.com/authorization'  # Domínio internacional como alternativa
 MERCADOLIVRE_TOKEN_URL = 'https://api.mercadolivre.com/oauth/token'
 MERCADOLIVRE_API_URL = 'https://api.mercadolivre.com'
 
