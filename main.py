@@ -1,6 +1,6 @@
 import os
-# Adicionado para forçar uso de DNS públicos como solução alternativa
-os.environ['RESOLVER_OVERRIDE'] = '1.1.1.1,8.8.8.8,208.67.222.222'
+# Removido os.environ['RESOLVER_OVERRIDE'] pois não será mais necessário com a nova estratégia de DNS
+# e endpoints internacionais.
 
 import json
 import requests
@@ -29,6 +29,13 @@ MERCADOLIVRE_REDIRECT_URI = f"{DOMAIN}/oauth/callback/mercadolivre"
 MERCADOLIVRE_AUTH_URL = 'https://auth.mercadolibre.com/authorization'
 MERCADOLIVRE_TOKEN_URL = 'https://api.mercadolibre.com/oauth/token'
 MERCADOLIVRE_API_URL = 'https://api.mercadolibre.com'
+
+# Headers padrão para todas as requisições do Mercado Livre
+MERCADOLIVRE_HEADERS = {
+    'X-Client': 'SistemaBipagem/1.0', # Identificação do seu aplicativo
+    'Accept': 'application/json',
+    'X-Meli-Site': 'MLB'  # Força o endpoint brasileiro mesmo no domínio internacional
+}
 
 
 # Credenciais da Loja Integrada (substitua pelas suas )
@@ -171,13 +178,9 @@ def oauth_callback_mercadolivre():
         response = http_session.post( # Usa http_session
             MERCADOLIVRE_TOKEN_URL,
             data=data,
-            headers={
-                'Accept': 'application/json',
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'User-Agent': 'SistemaBipagem/1.0 (contact@masterhotelaria.com.br )' # Adicionado User-Agent
-            },
+            headers=MERCADOLIVRE_HEADERS, # Usando os headers padrão
             timeout=10 # Adicionado timeout de 10 segundos
-        )
+         )
         
         # Verifique se a URL foi resolvida (nova verificação)
         if "api.mercadolibre.com" not in MERCADOLIVRE_TOKEN_URL: # Ajustado para o novo domínio
@@ -214,11 +217,11 @@ def get_mercadolivre_user_info(access_token):
         response = http_session.get( # Usa http_session
             f"{MERCADOLIVRE_API_URL}/users/me",
             headers={
-                'Authorization': f'Bearer {access_token}',
-                'User-Agent': 'SistemaBipagem/1.0 (contact@masterhotelaria.com.br )' # Adicionado User-Agent
+                **MERCADOLIVRE_HEADERS, # Usando os headers padrão
+                'Authorization': f'Bearer {access_token}'
             },
             timeout=10 # Adicionado timeout
-        )
+         )
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException:
@@ -236,11 +239,11 @@ def test_mercadolivre_connection():
         response = http_session.get( # Usa http_session
             f"{MERCADOLIVRE_API_URL}/users/me",
             headers={
-                'Authorization': f'Bearer {session['mercadolivre_access_token']}',
-                'User-Agent': 'SistemaBipagem/1.0 (contact@masterhotelaria.com.br )' # Adicionado User-Agent
+                **MERCADOLIVRE_HEADERS, # Usando os headers padrão
+                'Authorization': f'Bearer {session['mercadolivre_access_token']}'
             },
             timeout=10 # Adicionado timeout
-        )
+         )
         
         if response.status_code == 401:
             # Token pode ter expirado - tentar renovar com refresh_token
@@ -251,11 +254,11 @@ def test_mercadolivre_connection():
                     response = http_session.get( # Usa http_session
                         f"{MERCADOLIVRE_API_URL}/users/me",
                         headers={
-                            'Authorization': f'Bearer {session['mercadolivre_access_token']}',
-                            'User-Agent': 'SistemaBipagem/1.0 (contact@masterhotelaria.com.br )' # Adicionado User-Agent
+                            **MERCADOLIVRE_HEADERS, # Usando os headers padrão
+                            'Authorization': f'Bearer {session['mercadolivre_access_token']}'
                         },
                         timeout=10 # Adicionado timeout
-                    )
+                     )
                     response.raise_for_status()
                     return jsonify(response.json())
                 else:
@@ -281,9 +284,7 @@ def refresh_mercadolivre_token():
     
     try:
         http_session = create_http_session( ) # Usa a sessão com retries
-        response = http_session.post(MERCADOLIVRE_TOKEN_URL, data=data, headers={
-            'User-Agent': 'SistemaBipagem/1.0 (contact@masterhotelaria.com.br )' # Adicionado User-Agent
-        }, timeout=10) # Adicionado timeout
+        response = http_session.post(MERCADOLIVRE_TOKEN_URL, data=data, headers=MERCADOLIVRE_HEADERS, timeout=10 ) # Usando os headers padrão
         response.raise_for_status()
         token_data = response.json()
         
@@ -324,13 +325,17 @@ def test_dns():
             ))
 
         return jsonify({
-            "status": "success" if "✅ Resolvido" in results.values() else "warning", # Ajustado para verificar a string completa
+            "status": "success" if "✅ Resolvido" in "".join(results.values()) else "warning",
             "results": results,
             "recommendation": "Use os endpoints internacionais caso haja falhas" 
         })
         
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify({
+            "status": "error",
+            "message": str(e),
+            "solution": "Contate o suporte do Railway sobre bloqueio de DNS"
+        }), 500
 
 
 @app.route('/oauth/loja-integrada')
