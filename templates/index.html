@@ -138,4 +138,137 @@
                 <div id="saleInfo" class="hidden bg-green-50 p-4 rounded-md">
                     <h3 class="text-lg font-semibold mb-2">Informações da Venda:</h3>
                     <p id="saleCode"></p>
-                    <p id
+                    <p id="saleProduct"></p>
+                    <p id="salePrice"></p>
+                    <p id="saleBuyer"></p>
+                    <p id="saleDate"></p>
+                    <p id="saleOrderId"></p>
+                    <p id="saleShipmentStatus"></p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Funções JavaScript para o frontend
+        function clearResults() {
+            document.getElementById('barcodeInput').value = '';
+            document.getElementById('statusMessage').textContent = '';
+            document.getElementById('productDisplay').classList.add('hidden');
+            document.getElementById('saleInfo').classList.add('hidden');
+        }
+
+        async function processBarcode() {
+            const barcode = document.getElementById('barcodeInput').value;
+            const statusMessage = document.getElementById('statusMessage');
+            const productDisplay = document.getElementById('productDisplay');
+            const saleInfo = document.getElementById('saleInfo');
+
+            if (!barcode) {
+                statusMessage.textContent = 'Por favor, insira um ID de Envio (Pack ID).';
+                return;
+            }
+
+            statusMessage.textContent = 'Processando ID do Envio...';
+            productDisplay.classList.add('hidden');
+            saleInfo.classList.add('hidden');
+
+            try {
+                const response = await fetch('/process_barcode', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ barcode: barcode })
+                });
+
+                const data = await response.json();
+
+                if (data.error) {
+                    statusMessage.textContent = `Erro: ${data.error}`;
+                    return;
+                }
+
+                // Atualiza a exibição do produto
+                document.getElementById('productImage').src = data.product.image;
+                document.getElementById('productName').textContent = data.product.name;
+                document.getElementById('productPrice').textContent = `Preço: R$ ${data.product.price.toFixed(2)}`;
+                document.getElementById('productPlatform').textContent = `Plataforma: ${data.product.platform}`;
+                document.getElementById('productDescription').textContent = `Descrição: ${data.product.description}`;
+                productDisplay.classList.remove('hidden');
+
+                // Atualiza a exibição das informações da venda
+                document.getElementById('saleCode').textContent = `Código: ${data.sale_info.barcode}`;
+                document.getElementById('saleProduct').textContent = `Produto: ${data.sale_info.product_name}`;
+                document.getElementById('salePrice').textContent = `Preço da Venda: R$ ${data.sale_info.price.toFixed(2)}`;
+                document.getElementById('saleBuyer').textContent = `Comprador: ${data.sale_info.buyer}`;
+                document.getElementById('saleDate').textContent = `Data/Hora: ${new Date(data.sale_info.timestamp).toLocaleString()}`;
+                
+                // Campos específicos do Mercado Livre
+                if (data.sale_info.order_id) {
+                    document.getElementById('saleOrderId').textContent = `ID do Pedido ML: ${data.sale_info.order_id}`;
+                    document.getElementById('saleOrderId').classList.remove('hidden');
+                } else {
+                    document.getElementById('saleOrderId').classList.add('hidden');
+                }
+                if (data.sale_info.shipment_status) {
+                    document.getElementById('saleShipmentStatus').textContent = `Status do Envio: ${data.sale_info.shipment_status}`;
+                    document.getElementById('saleShipmentStatus').classList.remove('hidden');
+                } else {
+                    document.getElementById('saleShipmentStatus').classList.add('hidden');
+                }
+
+                saleInfo.classList.remove('hidden');
+                statusMessage.textContent = 'ID do Envio processado com sucesso!';
+
+            } catch (error) {
+                statusMessage.textContent = `Erro na requisição: ${error.message}`;
+                console.error('Erro na requisição:', error);
+            }
+        }
+
+        async function testMercadoLivreConnection() {
+            const resultDiv = document.getElementById('apiTestResult');
+            resultDiv.innerHTML = '<p class="text-blue-600">Testando conexão com API...</p>';
+            resultDiv.classList.remove('hidden');
+            
+            try {
+                const response = await fetch('/mercadolivre/test');
+                const data = await response.json();
+
+                if (data.error) {
+                    resultDiv.innerHTML = `<p class="text-red-600">Erro: ${data.error}</p>`;
+                } else {
+                    resultDiv.innerHTML = `
+                        <p class="text-green-600 font-medium">Conexão com API bem-sucedida!</p>
+                        <div class="mt-2 p-2 bg-white rounded border">
+                            <pre class="text-xs overflow-auto">${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<p class="text-red-600">Erro na requisição: ${error.message}</p>`;
+                console.error('Erro na requisição:', error);
+            }
+        }
+        
+        function disconnectMercadoLivre() {
+            // Implementar lógica de desconexão (limpar sessão, etc.)
+            // Por enquanto, apenas recarrega a página
+            alert('Funcionalidade de desconexão não implementada. Recarregando a página.');
+            window.location.reload();
+        }
+
+        function disconnectLojaIntegrada() {
+            // Implementar lógica de desconexão
+            alert('Funcionalidade de desconexão não implementada. Recarregando a página.');
+            window.location.reload();
+        }
+
+        // Mostrar/ocultar seção de info quando conexão muda
+        {% if ml_connected %}
+        document.getElementById('mercadolivreInfo').style.display = 'block';
+        {% endif %}
+    </script>
+</body>
+</html>
