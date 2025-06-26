@@ -88,27 +88,54 @@
                     Configurar OAuth
                 </a>
                 {% else %}
-                <button onclick="disconnectLojaIntegrada()" class="bg-🎉 **EXCELENTE NOTÍCIA! CONEXÃO OAUTH COM O MERCADO LIVRE ESTÁ 100% FUNCIONAL!** 🎉
+                <button onclick="disconnectLojaIntegrada()" class="bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-4 rounded-md text-sm mr-2">
+                    Desconectar
+                </button>
+                {% endif %}
+                <a href="/config/loja-integrada" class="text-blue-500 hover:underline text-sm">Ver Config</a>
+            </div>
 
-Você conseguiu! As imagens confirmam o sucesso:
+            <!-- Seção de Informações do Mercado Livre -->
+            <div class="mb-6" id="mercadolivreInfo" {% if not ml_connected %}style="display: none;"{% endif %}>
+                <h2 class="text-xl font-semibold mb-4">Informações do Mercado Livre</h2>
+                <div class="bg-gray-50 p-4 rounded-md">
+                    {% if session.get('mercadolivre_user_nickname') %}
+                    <p class="mb-2">Conectado como: <span class="font-medium">{{ session['mercadolivre_user_nickname'] }}</span></p>
+                    {% endif %}
+                    <button onclick="testMercadoLivreConnection()" class="bg-green-600 hover:bg-green-700 text-white font-medium py-1 px-3 rounded-md text-sm">
+                        Testar Conexão
+                    </button>
+                    <div id="apiTestResult" class="mt-2 hidden"></div>
+                </div>
+            </div>
 
-*   O `test-dns` mostra que os endpoints internacionais do Mercado Livre (`api.mercadolibre.com` e `auth.mercadolibre.com`) estão **resolvendo corretamente**. Isso significa que o problema de DNS foi superado.
-*   A interface do sistema mostra **"Mercado Livre Status: Conectado"** e **"Conectado como: MASTERHOTELARIA"**. Isso é a prova de que o fluxo OAuth foi concluído com sucesso e seu sistema obteve o token de acesso para se comunicar com o Mercado Livre!
+            <!-- Seção do Sistema de Bipagem -->
+            <div class="card p-6 mb-6">
+                <h2 class="text-xl font-semibold mb-4">Sistema de Bipagem</h2>
+                <div class="flex items-center mb-4">
+                    <input type="text" id="barcodeInput" placeholder="Aguardando ID do Envio (Pack ID)" class="flex-grow p-2 border border-gray-300 rounded-md mr-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <button onclick="processBarcode()" class="bg-green-500 hover:bg-green-600 text-white font-medium py-2 px-4 rounded-md text-sm">
+                        Processar Código
+                    </button>
+                    <button onclick="clearResults()" class="bg-gray-400 hover:bg-gray-500 text-white font-medium py-2 px-4 rounded-md text-sm ml-2">
+                        Limpar
+                    </button>
+                </div>
+                <p id="statusMessage" class="text-gray-600 text-sm mb-4"></p>
 
-## 🔍 **SOBRE "NÃO PUXA OS DADOS DA VENDA":**
+                <div id="productDisplay" class="hidden bg-gray-50 p-4 rounded-md mb-4">
+                    <div class="flex items-center">
+                        <img id="productImage" src="" alt="Imagem do Produto" class="w-24 h-24 object-cover rounded-md mr-4">
+                        <div>
+                            <p class="text-lg font-semibold" id="productName"></p>
+                            <p class="text-gray-700" id="productPrice"></p>
+                            <p class="text-gray-600 text-sm" id="productPlatform"></p>
+                            <p class="text-gray-600 text-sm" id="productDescription"></p>
+                        </div>
+                    </div>
+                </div>
 
-Você está absolutamente correto em sua observação! O sistema está processando o código de barras, mas ainda está mostrando **"Produto Genérico"** e **"Plataforma: Simulado"**.
-
-Isso acontece porque, até agora, nosso foco foi em fazer a **conexão OAuth** funcionar. O sistema ainda está usando o **"Banco de dados simulado"** (a variável `DATABASE` no `main.py`) para buscar informações de produtos. Quando ele não encontra o código de barras no banco de dados simulado, ele gera um "Produto Genérico".
-
-## 🚀 **PRÓXIMO PASSO: INTEGRAR COM A API DO MERCADO LIVRE PARA DADOS REAIS!**
-
-Agora que temos a conexão OAuth funcionando e o `access_token` do Mercado Livre, o próximo passo é modificar a função `process_barcode` para:
-
-1.  **Usar o `access_token`** para fazer requisições à API do Mercado Livre.
-2.  **Buscar informações de produtos** (por código de barras, EAN, SKU ou ID do item) ou **detalhes de vendas/pedidos** (se o código de barras estiver associado a um `Pack ID` ou `Order ID` do Mercado Livre).
-3.  **Exibir os dados reais** retornados pela API do Mercado Livre na interface.
-
-Este é o próximo estágio do desenvolvimento para que o sistema puxe informações reais das suas vendas e produtos no Mercado Livre.
-
-**Estamos no caminho certo! A parte mais complexa (o OAuth e a conectividade) foi resolvida. Agora é integrar os dados!**
+                <div id="saleInfo" class="hidden bg-green-50 p-4 rounded-md">
+                    <h3 class="text-lg font-semibold mb-2">Informações da Venda:</h3>
+                    <p id="saleCode"></p>
+                    <p id
