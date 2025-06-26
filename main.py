@@ -1,221 +1,183 @@
 import os
-import json
 import requests
-from flask import Flask, request, redirect, url_for, session, render_template, jsonify
-from datetime import datetime
-from urllib.parse import urlencode
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
-import socket # Importação para testar DNS
-import concurrent.futures # Para o teste DNS paralelo
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify
+from datetime import datetime, timedelta
+import re # Importar regex para extração de IDs
 
+# Configurações do Flask
 app = Flask(__name__)
-app.secret_key = os.urandom(24) # Mantenha esta linha para segurança da sessão
+app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'sua_chave_secreta_padrao_muito_segura')
 
-# Configurações do OAuth para Mercado Livre e Loja Integrada
-# ATENÇÃO: O DOMAIN agora aponta para o Railway para o callback funcionar
-DOMAIN = "https://sistema-bipagem-masterhotelaria-production.up.railway.app"
-
-# Credenciais do Mercado Livre (substitua pelas suas )
-# CLIENT ID CORRIGIDO E SECRET AGORA LÊ DE VARIAVEL DE AMBIENTE OU USA DEFAULT
-MERCADOLIVRE_CLIENT_ID = os.environ.get("MERCADOLIVRE_CLIENT_ID", "427016700814141")
-MERCADOLIVRE_CLIENT_SECRET = os.environ.get("MERCADOLIVRE_CLIENT_SECRET", "CYR6NVWYsN5zf1JhdMUD4EA2WXDPyRry") # Use seu Client Secret aqui como default
-MERCADOLIVRE_REDIRECT_URI = f"{DOMAIN}/oauth/callback/mercadolivre"
-
-# URLs do Mercado Livre - Usando domínios internacionais por padrão para maior compatibilidade
+# Configurações OAuth atualizadas conforme documentação
+# Usando APENAS os endpoints internacionais (100% estáveis)
+MERCADOLIVRE_CLIENT_ID = os.environ.get('MERCADOLIVRE_CLIENT_ID', '427016700814141')
+MERCADOLIVRE_CLIENT_SECRET = os.environ.get('MERCADOLIVRE_CLIENT_SECRET', '')
+MERCADOLIVRE_REDIRECT_URI = os.environ.get('MERCADOLIVRE_REDIRECT_URI', 'https://sistema-bipagem-masterhotelaria-production.up.railway.app/oauth/callback/mercadolivre' )
 MERCADOLIVRE_AUTH_URL = 'https://auth.mercadolibre.com/authorization'
 MERCADOLIVRE_TOKEN_URL = 'https://api.mercadolibre.com/oauth/token'
 MERCADOLIVRE_API_URL = 'https://api.mercadolibre.com'
 
 # Headers padrão para todas as requisições do Mercado Livre
 MERCADOLIVRE_HEADERS = {
-    'X-Client': 'SistemaBipagem/1.0', # Identificação do seu aplicativo
+    'X-Client': 'SistemaBipagem/1.0',
     'Accept': 'application/json',
     'X-Meli-Site': 'MLB'  # Força o endpoint brasileiro mesmo no domínio internacional
 }
 
+# Configuração de timeout para requisições HTTP
+REQUEST_TIMEOUT = (3.05, 27 ) # 3.05s para conexão, 27s para leitura
 
-# Credenciais da Loja Integrada (substitua pelas suas )
-LOJAINTEGRADA_CLIENT_ID = os.environ.get("LOJAINTEGRADA_CLIENT_ID", "SEU_CLIENT_ID_LOJAINTEGRADA")
-LOJAINTEGRADA_CLIENT_SECRET = os.environ.get("LOJAINTEGRADA_CLIENT_SECRET", "SEU_CLIENT_SECRET_LOJAINTEGRADA")
-LOJAINTEGRADA_REDIRECT_URI = f"{DOMAIN}/oauth/callback/loja-integrada"
+# Variáveis de ambiente para teste de DNS (para debug, pode ser removido em produção)
+# os.environ['RESOLVER_OVERRIDE'] = '1.1.1.1,8.8.8.8,208.67.222.222'
 
-# Banco de dados simulado (para produtos e vendas) - Mantido para fallback ou outros usos
-DATABASE = {
-    "products": {
-        "45061874601": {
-            "name": "Capa de Almofada Impermeável",
-            "price": 119.90,
-            "image": "https://http2.mlstatic.com/D_NQ_NP_2X_687654-MLB72750979708_112023-F.webp",
-            "description": "Capa de almofada de alta qualidade, impermeável e durável.",
-            "platform": "Mercado Livre"
-        },
-        "78901234567": {
-            "name": "Jogo de Cama Casal 4 Peças",
-            "price": 159.90,
-            "image": "https://http2.mlstatic.com/D_NQ_NP_2X_704670-MLB72750979708_112023-F.webp",
-            "description": "Jogo de cama completo para casal, 100% algodão.",
-            "platform": "Mercado Livre"
-        },
-        "12345678901": {
-            "name": "Toalha de Banho Gigante",
-            "price": 79.90,
-            "image": "https://http2.mlstatic.com/D_NQ_NP_2X_704670-MLB72750979708_112023-F.webp",
-            "description": "Toalha de banho extra grande e macia.",
-            "platform": "Loja Integrada"
-        }
-    },
-    "sales": []
-}
+# --- Funções Auxiliares para Mercado Livre ---
 
-# Função para simular dados de produto se não encontrado
-def get_simulated_product_data(barcode ):
-    return {
-        "name": f"Produto Genérico {barcode}",
-        "price": round(float(barcode) % 100 + 20, 2), # Preço aleatório
-        "image": "https://via.placeholder.com/150?text=Produto+Nao+Encontrado",
-        "description": "Este é um produto simulado. Não encontrado na base de dados.",
-        "platform": "Simulado"
+def refresh_mercadolivre_token():
+    """Atualiza o token de acesso usando refresh token conforme documentação"""
+    if 'mercadolivre_refresh_token' not in session:
+        return False
+    
+    data = {
+        'grant_type': 'refresh_token',
+        'client_id': MERCADOLIVRE_CLIENT_ID,
+        'client_secret': MERCADOLIVRE_CLIENT_SECRET,
+        'refresh_token': session['mercadolivre_refresh_token']
     }
-
-# Função para criar uma sessão requests com retries
-def create_http_session( ):
-    session = requests.Session()
-    retries = Retry(
-        total=3, # Tenta 3 vezes
-        backoff_factor=1, # Espera 1, 2, 4 segundos entre as tentativas
-        status_forcelist=[500, 502, 503, 504], # Retenta em erros de servidor
-        allowed_methods=frozenset(['GET', 'POST']) # Permite retentar GET e POST
-    )
-    session.mount('https://', HTTPAdapter(max_retries=retries ))
-    return session
-
-# NOVA FUNÇÃO: Obter detalhes do envio do Mercado Livre
-def get_mercadolivre_shipment_details(shipment_id, access_token):
+    
     try:
-        http_session = create_http_session( )
-        response = http_session.get(
-            f"{MERCADOLIVRE_API_URL}/shipments/{shipment_id}",
-            headers={
-                **MERCADOLIVRE_HEADERS,
-                'Authorization': f'Bearer {access_token}'
-            },
-            timeout=10
-         )
-        response.raise_for_status() # Levanta exceção para status de erro HTTP (4xx ou 5xx)
+        response = requests.post(MERCADOLIVRE_TOKEN_URL, data=data, headers=MERCADOLIVRE_HEADERS, timeout=REQUEST_TIMEOUT)
+        response.raise_for_status()
+        token_data = response.json()
+        
+        session['mercadolivre_access_token'] = token_data['access_token']
+        session['mercadolivre_refresh_token'] = token_data.get('refresh_token', session['mercadolivre_refresh_token']) # Refresh token pode não ser retornado sempre
+        session['mercadolivre_expires_in'] = token_data.get('expires_in')
+        session['mercadolivre_token_obtained_at'] = datetime.now().timestamp() # Atualiza o timestamp
+        
+        return True
+    except requests.exceptions.RequestException as e:
+        print(f"Erro ao renovar token do ML: {e}")
+        return False
+
+def is_mercadolivre_token_valid():
+    """Verifica se o token de acesso do Mercado Livre é válido ou tenta renovar"""
+    if 'mercadolivre_access_token' not in session:
+        return False
+    
+    # Verifica se o token está perto de expirar (ex: 5 minutos antes)
+    expires_at = session.get('mercadolivre_token_obtained_at', 0) + session.get('mercadolivre_expires_in', 0)
+    if datetime.now().timestamp() < expires_at - 300: # 300 segundos = 5 minutos
+        return True
+    
+    # Se expirou ou está perto de expirar, tenta renovar
+    return refresh_mercadolivre_token()
+
+def get_mercadolivre_user_info(access_token):
+    """Obtém informações do usuário autenticado conforme API"""
+    try:
+        response = requests.get(
+            f"{MERCADOLIVRE_API_URL}/users/me",
+            headers={'Authorization': f'Bearer {access_token}', **MERCADOLIVRE_HEADERS},
+            timeout=REQUEST_TIMEOUT
+        )
+        response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
-        print(f"Erro ao buscar detalhes do envio {shipment_id}: {e}")
+        print(f"Erro ao obter info do usuário ML: {e}")
         return None
+
+def format_ml_shipment_id(input_id):
+    """
+    Formata o ID de envio para o padrão MLB20000XXXXXXXXXX.
+    Aceita:
+    - "20000XXXXXXXXXX" (13 dígitos)
+    - "MLB20000XXXXXXXXXX" (16 caracteres)
+    - "08311396659" (11 dígitos, sufixo de Pack ID)
+    """
+    input_id = input_id.strip()
+
+    # Caso 1: Já está no formato MLB20000...
+    if input_id.startswith('MLB20000') and len(input_id) == 16 and input_id[3:].isdigit():
+        return input_id
+    
+    # Caso 2: É o formato 20000... (13 dígitos)
+    if input_id.startswith('20000') and len(input_id) == 13 and input_id.isdigit():
+        return f"MLB{input_id}"
+    
+    # Caso 3: É o formato de 11 dígitos que vem depois do 20000 (ex: 08311396659)
+    if len(input_id) == 11 and input_id.isdigit():
+        return f"MLB20000{input_id}"
+
+    return None
+
+def format_address(address_data):
+    """Formata os dados de endereço para exibição."""
+    if not address_data:
+        return {}
+    
+    parts = [
+        address_data.get('street_name', ''),
+        str(address_data.get('street_number', '')),
+        address_data.get('comment', '')
+    ]
+    
+    full_address = " ".join(filter(None, parts)).strip()
+    
+    return {
+        "street": full_address,
+        "city": address_data.get('city', {}).get('name'),
+        "state": address_data.get('state', {}).get('id'),
+        "zip_code": address_data.get('zip_code'),
+        "complement": address_data.get('comment')
+    }
+
+def format_product_item(item_data):
+    """Formata os dados de um item de pedido."""
+    if not item_data:
+        return {}
+    return {
+        "id": item_data.get('item', {}).get('id'),
+        "title": item_data.get('item', {}).get('title'),
+        "quantity": item_data.get('quantity'),
+        "unit_price": item_data.get('unit_price'),
+        "full_unit_price": item_data.get('full_unit_price'),
+        "barcode": item_data.get('item', {}).get('barcode') # Pode não existir
+    }
+
+# --- Rotas da Aplicação ---
 
 @app.route('/')
 def index():
-    ml_connected = 'mercadolivre_access_token' in session
-    li_connected = 'lojaintegrada_access_token' in session
-    return render_template('index.html', domain=DOMAIN, ml_connected=ml_connected, li_connected=li_connected)
-
-@app.route('/process_barcode', methods=['POST'])
-def process_barcode():
-    # Agora esperamos um shipment_id (Pack ID)
-    shipment_id = request.json.get('barcode') # Usamos 'barcode' como nome do campo no frontend por conveniência
-    if not shipment_id:
-        return jsonify({"error": "ID do Envio (Pack ID) não fornecido"}), 400
-
-    product_data = None
-    sale_info = None
+    ml_connected = is_mercadolivre_token_valid()
+    li_connected = False # Exemplo para Loja Integrada
     
-    # Tenta buscar dados do Mercado Livre se conectado
-    if 'mercadolivre_access_token' in session:
-        ml_shipment_data = get_mercadolivre_shipment_details(shipment_id, session['mercadolivre_access_token'])
-        
-        if ml_shipment_data:
-            # Processa os dados do envio do Mercado Livre
-            order_id = ml_shipment_data.get('order_id')
-            status = ml_shipment_data.get('status')
-            receiver_address = ml_shipment_data.get('receiver_address', {})
-            items = ml_shipment_data.get('items', [])
+    ml_user_nickname = session.get('mercadolivre_user_nickname') if ml_connected else None
 
-            # Para simplificar, pegamos o primeiro item do envio
-            if items:
-                first_item = items[0]
-                product_data = {
-                    "name": first_item.get('title'),
-                    "price": first_item.get('unit_price'),
-                    "image": first_item.get('picture_url', 'https://via.placeholder.com/150?text=Sem+Imagem' ),
-                    "description": f"Item do Pedido ML #{order_id}",
-                    "platform": "Mercado Livre"
-                }
-            else:
-                product_data = get_simulated_product_data(shipment_id) # Fallback se não houver itens
-                product_data["description"] = f"Envio ML #{shipment_id} encontrado, mas sem itens detalhados."
+    return render_template('index.html', 
+                           ml_connected=ml_connected, 
+                           li_connected=li_connected,
+                           ml_user_nickname=ml_user_nickname)
 
-            sale_info = {
-                "barcode": shipment_id, # Usamos shipment_id aqui
-                "product_name": product_data["name"],
-                "price": product_data["price"],
-                "timestamp": datetime.now().isoformat(),
-                "buyer": receiver_address.get('receiver_name', 'N/A'),
-                "platform": "Mercado Livre (Real)",
-                "order_id": order_id,
-                "shipment_status": status
-            }
-        else:
-            # Fallback para dados simulados se a API do ML falhar ou não encontrar
-            product_data = get_simulated_product_data(shipment_id)
-            sale_info = {
-                "barcode": shipment_id,
-                "product_name": product_data["name"],
-                "price": product_data["price"],
-                "timestamp": datetime.now().isoformat(),
-                "buyer": "Simulado",
-                "platform": "Simulado"
-            }
-    else:
-        # Se não estiver conectado ao ML, usa dados simulados
-        product_data = get_simulated_product_data(shipment_id)
-        sale_info = {
-            "barcode": shipment_id,
-            "product_name": product_data["name"],
-            "price": product_data["price"],
-            "timestamp": datetime.now().isoformat(),
-            "buyer": "Simulado",
-            "platform": "Simulado (ML Desconectado)"
-        }
-
-    DATABASE["sales"].append(sale_info) # Adiciona ao histórico de vendas simulado
-
-    return jsonify({
-        "message": "ID do Envio processado com sucesso!",
-        "product": product_data,
-        "sale_info": sale_info
-    })
-
-@app.route('/reports')
-def reports():
-    return render_template('reports.html', sales=DATABASE["sales"])
-
-# Rotas de OAuth - Mercado Livre (ATUALIZADAS)
 @app.route('/oauth/mercadolivre')
-def oauth_mercadolivre():
+def mercadolivre_auth():
     # Parâmetros obrigatórios conforme documentação
     params = {
         'response_type': 'code',
         'client_id': MERCADOLIVRE_CLIENT_ID,
         'redirect_uri': MERCADOLIVRE_REDIRECT_URI,
-        # Adicionando state para proteção CSRF conforme boas práticas
-        'state': os.urandom(16).hex()
+        'state': os.urandom(16).hex(), # Adicionando state para proteção CSRF
+        'scope': 'offline_access read write' # Adicionando scopes necessários
     }
-    session['oauth_state'] = params['state'] # Armazena o state na sessão
+    session['oauth_state'] = params['state']
     
-    # Construindo URL conforme documentação oficial
-    auth_url = f"{MERCADOLIVRE_AUTH_URL}?{urlencode(params)}"
+    auth_url = f"{MERCADOLIVRE_AUTH_URL}?{requests.utils.urlencode(params)}"
     return redirect(auth_url)
 
 @app.route('/oauth/callback/mercadolivre')
-def oauth_callback_mercadolivre():
+def mercadolivre_callback():
     # Verificação do state para proteção CSRF
-    if request.args.get('state') != session.pop('oauth_state', None): # Usa pop para remover da sessão após uso
-        return "Erro de segurança: state inválido ou ausente", 403
+    if request.args.get('state') != session.get('oauth_state'):
+        return "Erro de segurança: state inválido", 403
     
     error = request.args.get('error')
     if error:
@@ -226,7 +188,6 @@ def oauth_callback_mercadolivre():
     if not code:
         return "Código de autorização não recebido", 400
     
-    # Preparando dados para troca do code por token
     data = {
         'grant_type': 'authorization_code',
         'client_id': MERCADOLIVRE_CLIENT_ID,
@@ -236,131 +197,153 @@ def oauth_callback_mercadolivre():
     }
     
     try:
-        http_session = create_http_session( ) # Usa a sessão com retries
-        # Fazendo a requisição conforme documentação
-        response = http_session.post( # Usa http_session
+        response = requests.post(
             MERCADOLIVRE_TOKEN_URL,
             data=data,
-            headers=MERCADOLIVRE_HEADERS, # Usando os headers padrão
-            timeout=10 # Adicionado timeout de 10 segundos
-         )
-        
-        # Verifique se a URL foi resolvida (nova verificação)
-        if "api.mercadolibre.com" not in MERCADOLIVRE_TOKEN_URL: # Ajustado para o novo domínio
-            return "URL da API configurada incorretamente no código", 500
-            
-        response.raise_for_status() # Levanta exceção para status de erro HTTP
+            headers=MERCADOLIVRE_HEADERS,
+            timeout=REQUEST_TIMEOUT
+        )
+        response.raise_for_status()
         
         token_data = response.json()
         
-        # Armazenando tokens conforme resposta esperada
         session['mercadolivre_access_token'] = token_data['access_token']
         session['mercadolivre_refresh_token'] = token_data.get('refresh_token')
         session['mercadolivre_expires_in'] = token_data.get('expires_in')
+        session['mercadolivre_token_obtained_at'] = datetime.now().timestamp() # Guarda o timestamp
         session['mercadolivre_user_id'] = token_data.get('user_id')
         
-        # Obter informações do usuário para demonstrar integração
         user_info = get_mercadolivre_user_info(token_data['access_token'])
         if user_info:
             session['mercadolivre_user_nickname'] = user_info.get('nickname')
         
         return redirect(url_for('index'))
-    except requests.exceptions.SSLError as e:
-        return f"Erro de SSL: {str(e)} - Verifique certificados ou configuração SSL", 500
-    except requests.exceptions.Timeout:
-        return "Tempo limite excedido ao conectar ao Mercado Livre. Tente novamente.", 504
     except requests.exceptions.RequestException as e:
-        # Captura NameResolutionError e outros erros de requisição
-        return f"Falha na requisição ao Mercado Livre: {str(e)} - Verifique conexão com a internet ou DNS", 500
+        return f"Erro na comunicação com o Mercado Livre: {str(e)}", 500
 
-def get_mercadolivre_user_info(access_token):
-    """Obtém informações do usuário autenticado conforme API"""
-    try:
-        http_session = create_http_session( ) # Usa a sessão com retries
-        response = http_session.get( # Usa http_session
-            f"{MERCADOLIVRE_API_URL}/users/me",
-            headers={
-                **MERCADOLIVRE_HEADERS, # Usando os headers padrão
-                'Authorization': f'Bearer {access_token}'
-            },
-            timeout=10 # Adicionado timeout
-         )
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException:
-        return None
+@app.route('/mercadolivre/disconnect')
+def mercadolivre_disconnect():
+    session.pop('mercadolivre_access_token', None)
+    session.pop('mercadolivre_refresh_token', None)
+    session.pop('mercadolivre_expires_in', None)
+    session.pop('mercadolivre_token_obtained_at', None)
+    session.pop('mercadolivre_user_id', None)
+    session.pop('mercadolivre_user_nickname', None)
+    return redirect(url_for('index'))
 
 @app.route('/mercadolivre/test')
 def test_mercadolivre_connection():
     """Rota de teste para verificar conexão com API"""
-    if 'mercadolivre_access_token' not in session:
-        return jsonify({'error': 'Não autenticado'}), 401
+    if not is_mercadolivre_token_valid():
+        return jsonify({'error': 'Não autenticado ou token expirado/inválido'}), 401
     
     try:
-        http_session = create_http_session( ) # Usa a sessão com retries
-        # Exemplo de chamada à API - obtendo informações do usuário
-        response = http_session.get( # Usa http_session
+        response = requests.get(
             f"{MERCADOLIVRE_API_URL}/users/me",
-            headers={
-                **MERCADOLIVRE_HEADERS, # Usando os headers padrão
-                'Authorization': f'Bearer {session['mercadolivre_access_token']}'
-            },
-            timeout=10 # Adicionado timeout
-         )
-        
-        if response.status_code == 401:
-            # Token pode ter expirado - tentar renovar com refresh_token
-            if 'mercadolivre_refresh_token' in session:
-                refresh_response = refresh_mercadolivre_token()
-                if refresh_response[1] == 200: # Verifica o status code da tupla retornada
-                    # Tentar novamente a chamada após o refresh
-                    response = http_session.get( # Usa http_session
-                        f"{MERCADOLIVRE_API_URL}/users/me",
-                        headers={
-                            **MERCADOLIVRE_HEADERS, # Usando os headers padrão
-                            'Authorization': f'Bearer {session['mercadolivre_access_token']}'
-                        },
-                        timeout=10 # Adicionado timeout
-                     )
-                    response.raise_for_status()
-                    return jsonify(response.json())
-                else:
-                    return refresh_response # Retorna o erro do refresh
-            return jsonify({'error': 'Token expirado e sem refresh token ou falha no refresh'}), 401
-        
+            headers={'Authorization': f'Bearer {session['mercadolivre_access_token']}', **MERCADOLIVRE_HEADERS},
+            timeout=REQUEST_TIMEOUT
+        )
         response.raise_for_status()
         return jsonify(response.json())
     except requests.exceptions.RequestException as e:
         return jsonify({'error': str(e)}), 500
 
-def refresh_mercadolivre_token():
-    """Atualiza o token de acesso usando refresh token conforme documentação"""
-    if 'mercadolivre_refresh_token' not in session:
-        return jsonify({'error': 'Refresh token não disponível'}), 400
+@app.route('/process_shipment', methods=['POST'])
+def process_shipment():
+    barcode_input = request.json.get('barcode')
     
-    data = {
-        'grant_type': 'refresh_token',
-        'client_id': MERCADOLIVRE_CLIENT_ID,
-        'client_secret': MERCADOLIVRE_CLIENT_SECRET,
-        'refresh_token': session['mercadolivre_refresh_token']
-    }
-    
-    try:
-        http_session = create_http_session( ) # Usa a sessão com retries
-        response = http_session.post(MERCADOLIVRE_TOKEN_URL, data=data, headers=MERCADOLIVRE_HEADERS, timeout=10 ) # Usando os headers padrão
-        response.raise_for_status()
-        token_data = response.json()
-        
-        # Atualiza os tokens na sessão
-        session['mercadolivre_access_token'] = token_data['access_token']
-        session['mercadolivre_refresh_token'] = token_data.get('refresh_token', session['mercadolivre_refresh_token']) # Refresh token pode não vir em todas as respostas
-        session['mercadolivre_expires_in'] = token_data.get('expires_in')
-        
-        return jsonify({'success': True, 'message': 'Token atualizado'}), 200
-    except requests.exceptions.RequestException as e:
-        return jsonify({'error': str(e)}), 500
+    if not barcode_input:
+        return jsonify({"error": "Código de barras não fornecido"}), 400
 
-# Nova rota para testar resolução de DNS
+    shipment_id_mlb = format_ml_shipment_id(barcode_input)
+    
+    if not shipment_id_mlb:
+        return jsonify({"error": "Código não é uma etiqueta válida do Mercado Livre (formato inválido)"}), 400
+
+    if not is_mercadolivre_token_valid():
+        return jsonify({"error": "Não autenticado no Mercado Livre ou token expirado"}), 401
+
+    try:
+        access_token = session['mercadolivre_access_token']
+        seller_id = session['mercadolivre_user_id']
+
+        # 1. Busca a ordem relacionada ao shipment_id_mlb
+        # O parâmetro 'q' para orders/search espera o ID do envio sem o prefixo 'MLB'
+        # Ex: MLB2000008311396659 -> 2000008311396659
+        order_search_id = shipment_id_mlb[3:] 
+        
+        order_response = requests.get(
+            f"{MERCADOLIVRE_API_URL}/orders/search?seller={seller_id}&q={order_search_id}",
+            headers={'Authorization': f'Bearer {access_token}', **MERCADOLIVRE_HEADERS},
+            timeout=REQUEST_TIMEOUT
+        )
+        order_response.raise_for_status()
+        
+        orders_data = order_response.json().get('results')
+        if not orders_data:
+            return jsonify({"error": f"Nenhum pedido encontrado para a etiqueta {barcode_input} na sua conta."}), 404
+
+        # Pega o primeiro pedido encontrado (assumindo que o Pack ID é único por pedido)
+        order_id = orders_data[0]['id']
+
+        # 2. Busca detalhes completos da ordem
+        order_details_response = requests.get(
+            f"{MERCADOLIVRE_API_URL}/orders/{order_id}",
+            headers={'Authorization': f'Bearer {access_token}', **MERCADOLIVRE_HEADERS},
+            timeout=REQUEST_TIMEOUT
+        )
+        order_details_response.raise_for_status()
+        order_details = order_details_response.json()
+
+        # 3. Busca detalhes completos do envio
+        shipping_id = order_details.get('shipping', {}).get('id')
+        shipping_details = {}
+        if shipping_id:
+            shipping_details_response = requests.get(
+                f"{MERCADOLIVRE_API_URL}/shipments/{shipping_id}",
+                headers={'Authorization': f'Bearer {access_token}', **MERCADOLIVRE_HEADERS},
+                timeout=REQUEST_TIMEOUT
+            )
+            shipping_details_response.raise_for_status()
+            shipping_details = shipping_details_response.json()
+
+        # Formata os dados para exibição
+        formatted_data = {
+            "order": {
+                "id": order_details.get('id'),
+                "date_created": order_details.get('date_created'),
+                "status": order_details.get('status'),
+                "total_amount": order_details.get('total_amount'),
+                "buyer_nickname": order_details.get('buyer', {}).get('nickname')
+            },
+            "shipping": {
+                "id": shipping_details.get('id'),
+                "status": shipping_details.get('status'),
+                "shipping_method": shipping_details.get('shipping_option', {}).get('shipping_method', {}).get('name'),
+                "estimated_delivery": shipping_details.get('estimated_delivery_final', {}).get('date'),
+                "receiver_name": shipping_details.get('receiver_address', {}).get('receiver_name'),
+                "receiver_address": format_address(shipping_details.get('receiver_address')),
+                "receiver_phone": shipping_details.get('receiver_address', {}).get('phone', {}).get('number')
+            },
+            "items": [format_product_item(item) for item in order_details.get('order_items', [])]
+        }
+        
+        return jsonify({"status": "success", "data": formatted_data})
+
+    except requests.exceptions.HTTPError as e:
+        print(f"Erro HTTP ao buscar dados do ML: {e.response.status_code} - {e.response.text}")
+        return jsonify({
+            "error": f"Erro na API do Mercado Livre: {e.response.status_code}",
+            "details": e.response.json() if e.response.text else "Nenhum detalhe adicional"
+        }), e.response.status_code
+    except requests.exceptions.RequestException as e:
+        print(f"Erro de conexão ao buscar dados do ML: {e}")
+        return jsonify({"error": f"Erro de conexão: {str(e)}"}), 500
+    except Exception as e:
+        print(f"Erro inesperado ao processar envio: {e}")
+        return jsonify({"error": f"Erro inesperado: {str(e)}"}), 500
+
+# --- Rota de Teste de DNS (para debug) ---
 @app.route('/test-dns')
 def test_dns():
     try:
@@ -368,10 +351,10 @@ def test_dns():
         import concurrent.futures
 
         endpoints = {
-            'API Nacional': 'api.mercadolivre.com',
             'API Internacional': 'api.mercadolibre.com',
-            'Auth Nacional': 'auth.mercadolivre.com.br',
-            'Auth Internacional': 'auth.mercadolibre.com'
+            'API Nacional': 'api.mercadolivre.com',
+            'Auth Internacional': 'auth.mercadolibre.com',
+            'Auth Nacional': 'auth.mercadolivre.com.br'
         }
 
         def check_dns(endpoint):
@@ -388,56 +371,14 @@ def test_dns():
             ))
 
         return jsonify({
-            "status": "success" if "✅ Resolvido" in "".join(results.values()) else "warning",
+            "status": "success" if "✅" in "".join(results.values()) else "warning",
             "results": results,
             "recommendation": "Use os endpoints internacionais caso haja falhas" 
         })
-        
+
     except Exception as e:
-        return jsonify({
-            "status": "error",
-            "message": str(e),
-            "solution": "Contate o suporte do Railway sobre bloqueio de DNS"
-        }), 500
-
-
-@app.route('/oauth/loja-integrada')
-def oauth_loja_integrada():
-    # Loja Integrada usa um fluxo OAuth ligeiramente diferente ou API Key direta
-    # Este é um placeholder. Você precisaria implementar o fluxo real da LI.
-    # Geralmente envolve um link para autorização e um callback para obter o token.
-    return "Integração Loja Integrada em desenvolvimento. Por favor, configure manualmente.", 200
-
-@app.route('/oauth/callback/loja-integrada')
-def oauth_callback_loja_integrada():
-    # Este é um placeholder para o callback da Loja Integrada
-    # Em um cenário real, você processaria o código e obteria o token aqui.
-    session['lojaintegrada_access_token'] = "mock_token_li" # Token simulado
-    return redirect(url_for('index'))
-
-@app.route('/config/mercadolivre')
-def config_mercadolivre():
-    return render_template('config_mercadolivre.html',
-                           client_id=MERCADOLIVRE_CLIENT_ID,
-                           client_secret=MERCADOLIVRE_CLIENT_SECRET,
-                           redirect_uri=MERCADOLIVRE_REDIRECT_URI)
-
-@app.route('/config/shopee')
-def config_shopee():
-    return render_template('config_shopee.html')
-
-@app.route('/config/loja-integrada')
-def config_loja_integrada():
-    return render_template('config_loja_integrada.html',
-                           client_id=LOJAINTEGRADA_CLIENT_ID,
-                           client_secret=LOJAINTEGRADA_CLIENT_SECRET,
-                           redirect_uri=LOJAINTEGRADA_REDIRECT_URI)
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 8080)) # Railway usa 8080 por padrão
-    print(f"Sistema de Bipagem - OAuth Real no Railway")
-    print(f"Integração REAL com APIs das plataformas")
-    print(f"Domínio: {DOMAIN}")
-    print(f"OAuth 2.0 funcionando")
-    print(f"Banco de dados inicializado com {len(DATABASE['products'])} produtos.")
-    app.run(host='0.0.0.0', port=port)
+    app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+

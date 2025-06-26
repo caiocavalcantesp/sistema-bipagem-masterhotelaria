@@ -4,271 +4,45 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistema de Bipagem - OAuth Real</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tailwind CSS CDN -->
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #f4f7f6;
-        }
-        .container {
-            max-width: 960px;
-        }
-        .card {
-            background-color: #ffffff;
-            border-radius: 0.5rem;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1 );
-        }
         .status-connected {
             color: #10B981; /* green-500 */
-            font-weight: 600;
+            font-weight: bold;
         }
         .status-disconnected {
             color: #EF4444; /* red-500 */
-            font-weight: 600;
+            font-weight: bold;
         }
-        .status-developing {
-            color: #F59E0B; /* amber-500 */
-            font-weight: 600;
+        .card {
+            background-color: #fff;
+            border-radius: 0.5rem;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1 ), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+        }
+        .header-bg {
+            background-color: #3B82F6; /* blue-500 */
         }
     </style>
 </head>
-<body class="bg-gray-100 min-h-screen flex flex-col">
-    <header class="bg-blue-600 text-white p-4 shadow-md">
+<body class="bg-gray-100 font-sans leading-normal tracking-normal">
+
+    <!-- Header -->
+    <header class="header-bg p-4 shadow-md">
         <div class="container mx-auto flex justify-between items-center">
-            <h1 class="text-2xl font-bold">Sistema de Bipagem - OAuth Real</h1>
+            <h1 class="text-white text-2xl font-bold">Sistema de Bipagem - OAuth Real</h1>
             <nav>
-                <a href="/" class="text-white hover:text-blue-200 mr-4">Início</a>
-                <a href="/reports" class="text-white hover:text-blue-200">Relatórios</a>
+                <ul class="flex space-x-4">
+                    <li><a href="/" class="text-white hover:text-blue-200">Início</a></li>
+                    <li><a href="#" class="text-white hover:text-blue-200">Relatórios</a></li>
+                </ul>
             </nav>
         </div>
     </header>
 
-    <main class="container mx-auto p-6 flex-grow">
-        <h2 class="text-2xl font-semibold mb-6 text-gray-800">Status das Integrações</h2>
+    <!-- Main Content -->
+    <main class="container mx-auto mt-8 p-4">
+        <h2 class="text-2xl font-bold mb-6 text-gray-800">Status das Integrações</h2>
 
-        <div class="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 mb-6" role="alert">
-            <p class="font-bold">OAuth Real - Railway</p>
-            <p>Sistema rodando no Railway com OAuth funcional.</p>
-            <p>Callbacks configurados para: <span class="font-mono text-sm">{{ domain }}</span></p>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <!-- Card Mercado Livre -->
-            <div class="card p-6">
-                <h3 class="text-xl font-semibold mb-4">Mercado Livre <span class="text-gray-500">🛒</span></h3>
-                <p class="mb-4">Status: <span class="{{ 'status-connected' if ml_connected else 'status-disconnected' }}">{{ 'Conectado' if ml_connected else 'Desconectado' }}</span></p>
-                {% if not ml_connected %}
-                <a href="/oauth/mercadolivre" class="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-md text-sm mr-2">
-                    Configurar OAuth
-                </a>
-                {% else %}
-                <button onclick="disconnectMercadoLivre()" class="bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-4 rounded-md text-sm mr-2">
-                    Desconectar
-                </button>
-                {% endif %}
-                <a href="/config/mercadolivre" class="text-blue-500 hover:underline text-sm">Ver Config</a>
-            </div>
-
-            <!-- Card Shopee -->
-            <div class="card p-6">
-                <h3 class="text-xl font-semibold mb-4">Shopee <span class="text-gray-500">🛍️</span></h3>
-                <p class="mb-4">Status: <span class="status-developing">Em Desenvolvimento</span></p>
-                <button class="bg-gray-400 text-white font-medium py-2 px-4 rounded-md text-sm cursor-not-allowed mr-2" disabled>
-                    Em Breve
-                </button>
-                <a href="/config/shopee" class="text-blue-500 hover:underline text-sm">Ver Config</a>
-            </div>
-
-            <!-- Card Loja Integrada -->
-            <div class="card p-6">
-                <h3 class="text-xl font-semibold mb-4">Loja Integrada <span class="text-gray-500">📦</span></h3>
-                <p class="mb-4">Status: <span class="{{ 'status-connected' if li_connected else 'status-disconnected' }}">{{ 'Conectado' if li_connected else 'Desconectado' }}</span></p>
-                {% if not li_connected %}
-                <a href="/oauth/loja-integrada" class="bg-purple-500 hover:bg-purple-600 text-white font-medium py-2 px-4 rounded-md text-sm mr-2">
-                    Configurar OAuth
-                </a>
-                {% else %}
-                <button onclick="disconnectLojaIntegrada()" class="bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-4 rounded-md text-sm mr-2">
-                    Desconectar
-                </button>
-                {% endif %}
-                <a href="/config/loja-integrada" class="text-blue-500 hover:underline text-sm">Ver Config</a>
-            </div>
-
-            <!-- Seção de Informações do Mercado Livre -->
-            <div class="mb-6" id="mercadolivreInfo" {% if not ml_connected %}style="display: none;"{% endif %}>
-                <h2 class="text-xl font-semibold mb-4">Informações do Mercado Livre</h2>
-                <div class="bg-gray-50 p-4 rounded-md">
-                    {% if session.get('mercadolivre_user_nickname') %}
-                    <p class="mb-2">Conectado como: <span class="font-medium">{{ session['mercadolivre_user_nickname'] }}</span></p>
-                    {% endif %}
-                    <button onclick="testMercadoLivreConnection()" class="bg-green-600 hover:bg-green-700 text-white font-medium py-1 px-3 rounded-md text-sm">
-                        Testar Conexão
-                    </button>
-                    <div id="apiTestResult" class="mt-2 hidden"></div>
-                </div>
-            </div>
-
-            <!-- Seção do Sistema de Bipagem -->
-            <div class="card p-6 mb-6">
-                <h2 class="text-xl font-semibold mb-4">Sistema de Bipagem</h2>
-                <div class="flex items-center mb-4">
-                    <input type="text" id="barcodeInput" placeholder="Aguardando ID do Envio (Pack ID)" class="flex-grow p-2 border border-gray-300 rounded-md mr-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <button onclick="processBarcode()" class="bg-green-500 hover:bg-green-600 text-white font-medium py-2 px-4 rounded-md text-sm">
-                        Processar Código
-                    </button>
-                    <button onclick="clearResults()" class="bg-gray-400 hover:bg-gray-500 text-white font-medium py-2 px-4 rounded-md text-sm ml-2">
-                        Limpar
-                    </button>
-                </div>
-                <p id="statusMessage" class="text-gray-600 text-sm mb-4"></p>
-
-                <div id="productDisplay" class="hidden bg-gray-50 p-4 rounded-md mb-4">
-                    <div class="flex items-center">
-                        <img id="productImage" src="" alt="Imagem do Produto" class="w-24 h-24 object-cover rounded-md mr-4">
-                        <div>
-                            <p class="text-lg font-semibold" id="productName"></p>
-                            <p class="text-gray-700" id="productPrice"></p>
-                            <p class="text-gray-600 text-sm" id="productPlatform"></p>
-                            <p class="text-gray-600 text-sm" id="productDescription"></p>
-                        </div>
-                    </div>
-                </div>
-
-                <div id="saleInfo" class="hidden bg-green-50 p-4 rounded-md">
-                    <h3 class="text-lg font-semibold mb-2">Informações da Venda:</h3>
-                    <p id="saleCode"></p>
-                    <p id="saleProduct"></p>
-                    <p id="salePrice"></p>
-                    <p id="saleBuyer"></p>
-                    <p id="saleDate"></p>
-                    <p id="saleOrderId"></p>
-                    <p id="saleShipmentStatus"></p>
-                </div>
-            </div>
-        </div>
-    </main>
-
-    <script>
-        // Funções JavaScript para o frontend
-        function clearResults() {
-            document.getElementById('barcodeInput').value = '';
-            document.getElementById('statusMessage').textContent = '';
-            document.getElementById('productDisplay').classList.add('hidden');
-            document.getElementById('saleInfo').classList.add('hidden');
-        }
-
-        async function processBarcode() {
-            const barcode = document.getElementById('barcodeInput').value;
-            const statusMessage = document.getElementById('statusMessage');
-            const productDisplay = document.getElementById('productDisplay');
-            const saleInfo = document.getElementById('saleInfo');
-
-            if (!barcode) {
-                statusMessage.textContent = 'Por favor, insira um ID de Envio (Pack ID).';
-                return;
-            }
-
-            statusMessage.textContent = 'Processando ID do Envio...';
-            productDisplay.classList.add('hidden');
-            saleInfo.classList.add('hidden');
-
-            try {
-                const response = await fetch('/process_barcode', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ barcode: barcode })
-                });
-
-                const data = await response.json();
-
-                if (data.error) {
-                    statusMessage.textContent = `Erro: ${data.error}`;
-                    return;
-                }
-
-                // Atualiza a exibição do produto
-                document.getElementById('productImage').src = data.product.image;
-                document.getElementById('productName').textContent = data.product.name;
-                document.getElementById('productPrice').textContent = `Preço: R$ ${data.product.price.toFixed(2)}`;
-                document.getElementById('productPlatform').textContent = `Plataforma: ${data.product.platform}`;
-                document.getElementById('productDescription').textContent = `Descrição: ${data.product.description}`;
-                productDisplay.classList.remove('hidden');
-
-                // Atualiza a exibição das informações da venda
-                document.getElementById('saleCode').textContent = `Código: ${data.sale_info.barcode}`;
-                document.getElementById('saleProduct').textContent = `Produto: ${data.sale_info.product_name}`;
-                document.getElementById('salePrice').textContent = `Preço da Venda: R$ ${data.sale_info.price.toFixed(2)}`;
-                document.getElementById('saleBuyer').textContent = `Comprador: ${data.sale_info.buyer}`;
-                document.getElementById('saleDate').textContent = `Data/Hora: ${new Date(data.sale_info.timestamp).toLocaleString()}`;
-                
-                // Campos específicos do Mercado Livre
-                if (data.sale_info.order_id) {
-                    document.getElementById('saleOrderId').textContent = `ID do Pedido ML: ${data.sale_info.order_id}`;
-                    document.getElementById('saleOrderId').classList.remove('hidden');
-                } else {
-                    document.getElementById('saleOrderId').classList.add('hidden');
-                }
-                if (data.sale_info.shipment_status) {
-                    document.getElementById('saleShipmentStatus').textContent = `Status do Envio: ${data.sale_info.shipment_status}`;
-                    document.getElementById('saleShipmentStatus').classList.remove('hidden');
-                } else {
-                    document.getElementById('saleShipmentStatus').classList.add('hidden');
-                }
-
-                saleInfo.classList.remove('hidden');
-                statusMessage.textContent = 'ID do Envio processado com sucesso!';
-
-            } catch (error) {
-                statusMessage.textContent = `Erro na requisição: ${error.message}`;
-                console.error('Erro na requisição:', error);
-            }
-        }
-
-        async function testMercadoLivreConnection() {
-            const resultDiv = document.getElementById('apiTestResult');
-            resultDiv.innerHTML = '<p class="text-blue-600">Testando conexão com API...</p>';
-            resultDiv.classList.remove('hidden');
-            
-            try {
-                const response = await fetch('/mercadolivre/test');
-                const data = await response.json();
-
-                if (data.error) {
-                    resultDiv.innerHTML = `<p class="text-red-600">Erro: ${data.error}</p>`;
-                } else {
-                    resultDiv.innerHTML = `
-                        <p class="text-green-600 font-medium">Conexão com API bem-sucedida!</p>
-                        <div class="mt-2 p-2 bg-white rounded border">
-                            <pre class="text-xs overflow-auto">${JSON.stringify(data, null, 2)}</pre>
-                        </div>
-                    `;
-                }
-            } catch (error) {
-                resultDiv.innerHTML = `<p class="text-red-600">Erro na requisição: ${error.message}</p>`;
-                console.error('Erro na requisição:', error);
-            }
-        }
-        
-        function disconnectMercadoLivre() {
-            // Implementar lógica de desconexão (limpar sessão, etc.)
-            // Por enquanto, apenas recarrega a página
-            alert('Funcionalidade de desconexão não implementada. Recarregando a página.');
-            window.location.reload();
-        }
-
-        function disconnectLojaIntegrada() {
-            // Implementar lógica de desconexão
-            alert('Funcionalidade de desconexão não implementada. Recarregando a página.');
-            window.location.reload();
-        }
-
-        // Mostrar/ocultar seção de info quando conexão muda
-        {% if ml_connected %}
-        document.getElementById('mercadolivreInfo').style.display = 'block';
-        {% endif %}
-    </script>
-</body>
-</html>
+        <!-- Status Message -->
+        <div class="bg-green-100 border-l-4 border-green-500 text-green-700 p-4
