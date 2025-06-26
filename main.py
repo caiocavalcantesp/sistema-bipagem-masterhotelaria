@@ -1,4 +1,7 @@
 import os
+# Adicionado para forçar uso de DNS públicos como solução alternativa
+os.environ['RESOLVER_OVERRIDE'] = '1.1.1.1,8.8.8.8'
+
 import json
 import requests
 from flask import Flask, request, redirect, url_for, session, render_template, jsonify
@@ -6,7 +9,7 @@ from datetime import datetime
 from urllib.parse import urlencode
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-import socket # Nova importação para testar DNS
+import socket # Importação para testar DNS
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24) # Mantenha esta linha para segurança da sessão
@@ -294,11 +297,35 @@ def refresh_mercadolivre_token():
 @app.route('/test-dns')
 def test_dns():
     try:
-        # Tenta resolver o domínio da API do Mercado Livre
-        ip_address = socket.gethostbyname('api.mercadolivre.com')
-        return jsonify({"status": "success", "message": f"DNS resolvido com sucesso para {ip_address}"}), 200
-    except socket.gaierror as e:
-        return jsonify({"status": "error", "message": f"Falha ao resolver DNS para api.mercadolivre.com: {str(e)}"}), 500
+        import socket
+        # Teste múltiplos endpoints
+        endpoints = [
+            'api.mercadolivre.com',
+            'auth.mercadolivre.com.br',
+            'api.mercadolibre.com'  # Alternativo internacional
+        ]
+        
+        results = {}
+        for endpoint in endpoints:
+            try:
+                socket.gethostbyname(endpoint)
+                results[endpoint] = "Resolvido"
+            except socket.gaierror: # Corrigido de 'galerror' para 'gaierror'
+                results[endpoint] = "Falha"
+        
+        return jsonify({
+            "status": "success" if "Resolvido" in results.values() else "partial",
+            "results": results,
+            "recommendation": "Verifique as configurações de DNS do Railway" if "Falha" in results.values() else "DNS funcionando"
+        })
+        
+    except Exception as e:
+        # Código HTTP correto para erros internos (500)
+        return jsonify({
+            "status": "error",
+            "message": str(e),
+            "solution": "Contate o suporte do Railway sobre bloqueio de DNS"
+        }), 500 # Corrigido de 580 para 500
 
 
 @app.route('/oauth/loja-integrada')

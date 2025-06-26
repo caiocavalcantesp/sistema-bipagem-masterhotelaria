@@ -4,12 +4,12 @@
     "config": {
       "nixpacks": {
         "dns": {
-          "nameservers": ["1.1.1.1", "8.8.8.8", "8.8.4.4"]
+          "nameservers": ["1.1.1.1", "8.8.8.8", "208.67.222.222"]
         }
       }
     }
   },
   "deploy": {
-    "startCommand": "gunicorn main:app"
+    "startCommand": "gunicorn --timeout 120 main:app"
   }
 }
