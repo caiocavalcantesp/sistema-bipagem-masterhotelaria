@@ -10,6 +10,7 @@ from urllib.parse import urlencode
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import socket # Importação para testar DNS
+import concurrent.futures # Para o teste DNS paralelo
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24) # Mantenha esta linha para segurança da sessão
@@ -23,10 +24,11 @@ DOMAIN = "https://sistema-bipagem-masterhotelaria-production.up.railway.app"
 MERCADOLIVRE_CLIENT_ID = os.environ.get("MERCADOLIVRE_CLIENT_ID", "427016700814141")
 MERCADOLIVRE_CLIENT_SECRET = os.environ.get("MERCADOLIVRE_CLIENT_SECRET", "CYR6NVWYsN5zf1JhdMUD4EA2WXDPyRry") # Use seu Client Secret aqui como default
 MERCADOLIVRE_REDIRECT_URI = f"{DOMAIN}/oauth/callback/mercadolivre"
-# MERCADOLIVRE_AUTH_URL = 'https://auth.mercadolivre.com.br/authorization' # Linha original
-MERCADOLIVRE_AUTH_URL = 'https://auth.mercadolibre.com/authorization'  # Domínio internacional como alternativa
-MERCADOLIVRE_TOKEN_URL = 'https://api.mercadolivre.com/oauth/token'
-MERCADOLIVRE_API_URL = 'https://api.mercadolivre.com'
+
+# URLs do Mercado Livre - Usando domínios internacionais por padrão para maior compatibilidade
+MERCADOLIVRE_AUTH_URL = 'https://auth.mercadolibre.com/authorization'
+MERCADOLIVRE_TOKEN_URL = 'https://api.mercadolibre.com/oauth/token'
+MERCADOLIVRE_API_URL = 'https://api.mercadolibre.com'
 
 
 # Credenciais da Loja Integrada (substitua pelas suas )
@@ -178,7 +180,7 @@ def oauth_callback_mercadolivre():
         )
         
         # Verifique se a URL foi resolvida (nova verificação)
-        if "api.mercadolivre.com" not in MERCADOLIVRE_TOKEN_URL:
+        if "api.mercadolibre.com" not in MERCADOLIVRE_TOKEN_URL: # Ajustado para o novo domínio
             return "URL da API configurada incorretamente no código", 500
             
         response.raise_for_status() # Levanta exceção para status de erro HTTP
@@ -299,34 +301,36 @@ def refresh_mercadolivre_token():
 def test_dns():
     try:
         import socket
-        # Teste múltiplos endpoints
-        endpoints = [
-            'api.mercadolivre.com',
-            'auth.mercadolivre.com.br',
-            'api.mercadolibre.com'  # Alternativo internacional
-        ]
-        
-        results = {}
-        for endpoint in endpoints:
+        import concurrent.futures
+
+        endpoints = {
+            'API Nacional': 'api.mercadolivre.com',
+            'API Internacional': 'api.mercadolibre.com',
+            'Auth Nacional': 'auth.mercadolivre.com.br',
+            'Auth Internacional': 'auth.mercadolibre.com'
+        }
+
+        def check_dns(endpoint):
             try:
                 socket.gethostbyname(endpoint)
-                results[endpoint] = "Resolvido"
-            except socket.gaierror: # Corrigido de 'galerror' para 'gaierror'
-                results[endpoint] = "Falha"
-        
+                return "✅ Resolvido"
+            except socket.gaierror:
+                return "❌ Falha"
+
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            results = dict(zip(
+                endpoints.keys(),
+                executor.map(check_dns, endpoints.values())
+            ))
+
         return jsonify({
-            "status": "success" if "Resolvido" in results.values() else "partial",
+            "status": "success" if "✅ Resolvido" in results.values() else "warning", # Ajustado para verificar a string completa
             "results": results,
-            "recommendation": "Verifique as configurações de DNS do Railway" if "Falha" in results.values() else "DNS funcionando"
+            "recommendation": "Use os endpoints internacionais caso haja falhas" 
         })
         
     except Exception as e:
-        # Código HTTP correto para erros internos (500)
-        return jsonify({
-            "status": "error",
-            "message": str(e),
-            "solution": "Contate o suporte do Railway sobre bloqueio de DNS"
-        }), 500 # Corrigido de 580 para 500
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 
 @app.route('/oauth/loja-integrada')
