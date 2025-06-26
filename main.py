@@ -18,7 +18,6 @@ DOMAIN = "https://sistema-bipagem-masterhotelaria-production.up.railway.app"
 # CLIENT ID CORRIGIDO E SECRET AGORA LÊ DE VARIAVEL DE AMBIENTE OU USA DEFAULT
 MERCADOLIVRE_CLIENT_ID = os.environ.get("MERCADOLIVRE_CLIENT_ID", "427016700814141")
 MERCADOLIVRE_CLIENT_SECRET = os.environ.get("MERCADOLIVRE_CLIENT_SECRET", "CYR6NVWYsN5zf1JhdMUD4EA2WXDPyRry") # Use seu Client Secret aqui como default
-MERCADOLIVRE_REDIRECT_URI = f"{DOMAIN}/oauth/callback/mercadolivre"
 MERCADOLIVRE_AUTH_URL = 'https://auth.mercadolivre.com.br/authorization'
 MERCADOLIVRE_TOKEN_URL = 'https://api.mercadolivre.com/oauth/token'
 MERCADOLIVRE_API_URL = 'https://api.mercadolivre.com'
@@ -158,24 +157,32 @@ def oauth_callback_mercadolivre():
         'redirect_uri': MERCADOLIVRE_REDIRECT_URI
     }
     
-    try:
-        http_session = create_http_session( ) # Usa a sessão com retries
-        # Fazendo a requisição conforme documentação
-        response = http_session.post( # Usa http_session
-            MERCADOLIVRE_TOKEN_URL,
-            data=data,
-            headers={
-                'Accept': 'application/json',
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'User-Agent': 'SistemaBipagem/1.0 (contact@masterhotelaria.com.br )' # Adicionado User-Agent
-            },
-            timeout=10 # Adicionado timeout de 10 segundos
-        )
+   
+try:
+    http_session = create_http_session()
+    response = http_session.post(
+        MERCADOLIVRE_TOKEN_URL,
+        data=data,
+        headers={
+            'Accept': 'application/json',
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'User-Agent': 'SistemaBipagem/1.0'
+        },
+        timeout=10
+    )
+    
+    # Verifique se a URL foi resolvida
+    if "api.mercadolivre.com" not in MERCADOLIVRE_TOKEN_URL:
+        return "URL da API configurada incorretamente", 500
         
-        # Tratamento de erros conforme documentação
-        if response.status_code != 200:
-            error_data = response.json()
-            return f"Erro {error_data.get('error')}: {error_data.get('message')}", 400
+    response.raise_for_status()
+    # ... resto do código ...
+except requests.exceptions.SSLError as e:
+    return f"Erro de SSL: {str(e)} - Verifique certificados", 500
+except requests.exceptions.Timeout:
+    return "Tempo limite excedido ao conectar ao Mercado Livre", 504
+except requests.exceptions.RequestException as e:
+    return f"Falha na requisição: {str(e)} - Verifique conexão com a internet", 500
         
         token_data = response.json()
         
@@ -315,6 +322,22 @@ def config_loja_integrada():
                            client_id=LOJAINTEGRADA_CLIENT_ID,
                            client_secret=LOJAINTEGRADA_CLIENT_SECRET,
                            redirect_uri=LOJAINTEGRADA_REDIRECT_URI)
+# ... (mantenha todo o código existente antes)
+
+# Adicione esta nova rota ANTES do if __name__ == '__main__':
+@app.route('/test-dns')
+def test_dns():
+    try:
+        import socket
+        socket.gethostbyname('api.mercadolivre.com')
+        return jsonify({"status": "success", "message": "DNS resolvido com sucesso"})
+    except socket.gaierror:  # Corrigido "galerror" para "gaierror"
+        return jsonify({"status": "error", "message": "Falha ao resolver DNS"}), 500  # Corrigido 580 para 500
+
+# Mantenha este bloco abaixo (não altere)
+if __name__ == '__main__':
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port)
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8080)) # Railway usa 8080 por padrão

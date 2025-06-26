@@ -4,9 +4,12 @@
     "config": {
       "nixpacks": {
         "dns": {
-          "nameservers": ["1.1.1.1", "8.8.8.8"]
+          "nameservers": ["1.1.1.1", "8.8.8.8", "8.8.4.4"]
         }
       }
     }
+  },
+  "deploy": {
+    "startCommand": "gunicorn main:app"
   }
 }
