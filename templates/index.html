@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistema de Bipagem</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Sistema de Bipagem carregado');
+        });
+    </script>
 </head>
 <body class="bg-gray-100">
     <div class="container mx-auto px-4 py-8">
@@ -32,7 +37,7 @@
                 <h2 class="text-xl font-semibold mb-4">Bipagem de Envios</h2>
                 <div class="flex space-x-4">
                     <input type="text" id="barcodeInput" placeholder="Código de envio" 
-                           class="flex-1 px-3 py-2 border rounded">
+                           class="flex-1 px-3 py-2 border rounded" autofocus>
                     <button onclick="processShipment()" class="bg-blue-500 text-white px-4 py-2 rounded">
                         Processar
                     </button>
@@ -49,45 +54,60 @@
 
     <script>
         async function processShipment() {
-            const barcode = document.getElementById('barcodeInput').value;
+            const barcode = document.getElementById('barcodeInput').value.trim();
+            if (!barcode) {
+                alert('Por favor, digite um código válido');
+                return;
+            }
+
             const resultsDiv = document.getElementById('results');
             const contentDiv = document.getElementById('resultContent');
 
             resultsDiv.classList.add('hidden');
-            contentDiv.innerHTML = '<p>Processando...</p>';
+            contentDiv.innerHTML = '<p class="text-blue-500">Processando...</p>';
 
             try {
                 const response = await fetch('/process_shipment', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
                     },
                     body: JSON.stringify({ barcode })
                 });
 
                 const data = await response.json();
 
-                if (data.error) {
-                    contentDiv.innerHTML = `<p class="text-red-500">${data.error}</p>`;
-                } else {
-                    contentDiv.innerHTML = `
-                        <p><strong>ID do Pedido:</strong> ${data.data.id}</p>
-                        <p><strong>Status:</strong> ${data.data.status}</p>
-                        <pre class="text-xs mt-2">${JSON.stringify(data.data, null, 2)}</pre>
-                    `;
+                if (!response.ok) {
+                    throw new Error(data.error || 'Erro ao processar');
                 }
+
+                contentDiv.innerHTML = `
+                    <p><strong>ID do Pedido:</strong> ${data.data.id}</p>
+                    <p><strong>Status:</strong> ${data.data.status}</p>
+                    <pre class="text-xs mt-2 overflow-auto">${JSON.stringify(data.data, null, 2)}</pre>
+                `;
                 resultsDiv.classList.remove('hidden');
             } catch (error) {
                 contentDiv.innerHTML = `<p class="text-red-500">Erro: ${error.message}</p>`;
                 resultsDiv.classList.remove('hidden');
+                console.error('Erro:', error);
             }
         }
 
         async function testConnection() {
-            const response = await fetch('/mercadolivre/test');
-            const data = await response.json();
-            alert(data.error || "Conexão OK!");
+            try {
+                const response = await fetch('/mercadolivre/test');
+                const data = await response.json();
+                alert(data.message || "Conexão OK!");
+            } catch (error) {
+                alert("Erro ao testar conexão");
+                console.error(error);
+            }
         }
+
+        // Foco automático no campo de código
+        document.getElementById('barcodeInput').focus();
     </script>
 </body>
 </html>

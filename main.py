@@ -3,7 +3,7 @@ import requests
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 from datetime import datetime
 import re
-from urllib.parse import urlencode  # Importação corrigida
+from urllib.parse import urlencode
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', os.urandom(24))
@@ -11,10 +11,10 @@ app.secret_key = os.environ.get('FLASK_SECRET_KEY', os.urandom(24))
 # Configurações OAuth
 MERCADOLIVRE_CLIENT_ID = os.environ.get('MERCADOLIVRE_CLIENT_ID')
 MERCADOLIVRE_CLIENT_SECRET = os.environ.get('MERCADOLIVRE_CLIENT_SECRET')
-MERCADOLIVRE_REDIRECT_URI = os.environ.get('MERCADOLIVRE_REDIRECT_URI')
-MERCADOLIVRE_AUTH_URL = 'https://auth.mercadolibre.com/authorization'
-MERCADOLIVRE_TOKEN_URL = 'https://api.mercadolibre.com/oauth/token'
-MERCADOLIVRE_API_URL = 'https://api.mercadolibre.com'
+MERCADOLIVRE_REDIRECT_URI = os.environ.get('MERCADOLIVRE_REDIRECT_URI')  # Corrigido de URL para URI
+MERCADOLIVRE_AUTH_URL = 'https://auth.mercadolivre.com.br/authorization'  # URL corrigida com .br
+MERCADOLIVRE_TOKEN_URL = 'https://api.mercadolivre.com/oauth/token'
+MERCADOLIVRE_API_URL = 'https://api.mercadolivre.com'
 
 # Rotas principais
 @app.route('/')
@@ -32,7 +32,7 @@ def mercadolivre_auth():
         'scope': 'offline_access orders_read'
     }
     session['oauth_state'] = params['state']
-    return redirect(f"{MERCADOLIVRE_AUTH_URL}?{urlencode(params)}")  # Linha corrigida
+    return redirect(f"{MERCADOLIVRE_AUTH_URL}?{urlencode(params)}")
 
 @app.route('/oauth/callback/mercadolivre')
 def mercadolivre_callback():
@@ -75,7 +75,7 @@ def process_shipment():
         return jsonify({"error": "Não autenticado"}), 401
 
     barcode = request.json.get('barcode', '')
-    shipment_id = re.sub(r'[^0-9]', '', barcode)[-11:]  # Extrai os últimos 11 dígitos
+    shipment_id = re.sub(r'[^0-9]', '', barcode)[-11:]
 
     try:
         headers = {
@@ -83,7 +83,6 @@ def process_shipment():
             'Accept': 'application/json'
         }
 
-        # Busca o pedido relacionado ao shipment_id
         orders_response = requests.get(
             f"{MERCADOLIVRE_API_URL}/orders/search?seller={session['mercadolivre_user_id']}&q={shipment_id}",
             headers=headers,
@@ -97,7 +96,6 @@ def process_shipment():
 
         order_id = orders[0]['id']
         
-        # Busca detalhes do pedido
         order_response = requests.get(
             f"{MERCADOLIVRE_API_URL}/orders/{order_id}",
             headers=headers,
