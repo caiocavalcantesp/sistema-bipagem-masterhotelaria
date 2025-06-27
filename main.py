@@ -3,6 +3,7 @@ import requests
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 from datetime import datetime
 import re
+from urllib.parse import urlencode  # Importação corrigida
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', os.urandom(24))
@@ -31,7 +32,7 @@ def mercadolivre_auth():
         'scope': 'offline_access orders_read'
     }
     session['oauth_state'] = params['state']
-    return redirect(f"{MERCADOLIVRE_AUTH_URL}?{requests.utils.urlencode(params)}")
+    return redirect(f"{MERCADOLIVRE_AUTH_URL}?{urlencode(params)}")  # Linha corrigida
 
 @app.route('/oauth/callback/mercadolivre')
 def mercadolivre_callback():
@@ -111,6 +112,10 @@ def process_shipment():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.errorhandler(500)
+def internal_error(error):
+    return "Erro 500: Verifique os logs do servidor", 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
